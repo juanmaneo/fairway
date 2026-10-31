@@ -1,0 +1,9 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+description = "Dev automation for fairway (`cargo xtask <task>`)"
+license = "Apache-2.0"
+publish = false
+
+[dependencies]

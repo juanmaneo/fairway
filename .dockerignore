@@ -1,0 +1,3 @@
+# The image only installs the toolchain; keep the build context small.
+# (Podman/Buildah also read this file when there is no .containerignore.)
+*
