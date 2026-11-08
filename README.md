@@ -1,5 +1,8 @@
 # Fairway: a HighwayHash Rust port
 
+[![ci](https://github.com/juanmaneo/fairway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/juanmaneo/fairway/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 A zero-dependency Rust port of Google's
 [HighwayHash](https://github.com/google/highwayhash) (64/128/256-bit) and its
 companion SipHash-2-4 / SipHash-1-3.
