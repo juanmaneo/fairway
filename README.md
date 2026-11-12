@@ -1,5 +1,9 @@
 # Fairway: a HighwayHash Rust port
 
+Repo layout: the publishable library lives in [`crates/fairway-hash`](crates/fairway-hash)
+(published on crates.io as `fairway-hash`), dev automation in `xtask/`; the root
+`Cargo.toml` is a virtual workspace manifest.
+
 [![ci](https://github.com/juanmaneo/fairway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/juanmaneo/fairway/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
@@ -73,7 +77,7 @@ let mac13 = sip_hash13(k, b"message");
 
 ## Development
 
-Run before every push (CI runs the same command):
+Run from the repo root before every push (CI runs the same command):
 
 ```sh
 cargo xtask dev-check   # fmt, clippy + tests on every feature set, rustdoc, coverage
@@ -109,6 +113,12 @@ The tests port the upstream C++ suite: `tests/highwayhash_test.rs`
 backend against the portable one). Upstream's `vector_test` and
 `data_parallel_test` cover C++ vector classes and a thread pool, which this
 port doesn't have.
+
+## Publishing
+
+```sh
+cd crates/fairway-hash && cargo publish   # dry-run first: cargo publish --dry-run
+```
 
 ## License
 

@@ -147,6 +147,6 @@ fn cargo_command(args: &[&str]) -> Command {
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
-        .expect("xtask lives in the workspace root")
+        .expect("xtask/ sits at the workspace root")
         .to_path_buf()
 }

@@ -1,0 +1,115 @@
+# fairway-hash: a HighwayHash Rust port
+
+[![ci](https://github.com/juanmaneo/fairway/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/juanmaneo/fairway/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
+A zero-dependency Rust port of Google's
+[HighwayHash](https://github.com/google/highwayhash) (64/128/256-bit) and its
+companion SipHash-2-4 / SipHash-1-3.
+
+HighwayHash is a strong pseudorandom function with
+[security claims](https://arxiv.org/abs/1612.06257) — about 4x faster than
+SipHash and 10x faster than BLAKE2. This crate reproduces the exact, frozen
+output of the upstream C++ library and is verified against its golden test
+vectors (all input sizes 0..=64 for 64/128/256-bit hashes, the SipHash
+reference vectors, and the streaming "cat" equivalence test) on every backend.
+
+## Backends
+
+| Backend | Platforms | Selection |
+|---|---|---|
+| AVX2 | x86_64 | runtime-detected |
+| SSE4.1 | x86_64 | runtime-detected |
+| NEON | aarch64 | always available |
+| Portable (scalar) | everything else, incl. big-endian | fallback / `scalar` module |
+
+## Usage
+
+```rust
+use fairway_hash::{HighwayHasher, Key};
+
+let key = Key([1, 2, 3, 4]);
+
+// Incremental (streaming) hashing:
+let mut h = HighwayHasher::new(key);
+h.update(b"hello ");
+h.update(b"world");
+let h64: u64 = h.finalize64();
+let h128: [u64; 2] = h.finalize128();
+let h256: [u64; 4] = h.finalize256();
+
+// One-shot helpers (best backend for the current CPU):
+use fairway_hash::{fairway64, fairway128, fairway256};
+assert_eq!(fairway64(key, b"abc"), fairway64(key, b"abc"));
+
+// Force a specific backend (e.g. for cross-checking):
+use fairway_hash::{Backend, HighwayHasher};
+let mut h = HighwayHasher::with_backend(key, Backend::Portable);
+h.update(b"abc");
+
+// SipHash (matches the reference implementation byte-for-byte):
+use fairway_hash::{sip_hash, sip_hash13, SipHashKey};
+let k = SipHashKey([0x0706050403020100, 0x0F0E0D0C0B0A0908]);
+let mac = sip_hash(k, b"message");
+let mac13 = sip_hash13(k, b"message");
+```
+
+## Notes
+
+- The key should be random and secret; attackers who know the key can forge
+  hashes.
+- Streaming semantics match C++ `HighwayHashCatT`: hashing `["A", ""]` equals
+  `["", "A"]`. Append a length or non-empty marker per field if you hash
+  independent fields.
+- `no_std` is supported via `default-features = false`.
+- Build with `--features portable-only` to force the scalar backend on x86_64
+  (useful for testing).
+- `HighwayHasher::with_backend` falls back to the portable backend when the
+  requested one is not supported by the CPU/build; `backend()` reports the one
+  in use.
+- Without `std`, SIMD backends are only used when enabled at compile time
+  (e.g. `-C target-feature=+avx2`), since runtime detection needs `std`.
+- MSRV: Rust 1.88.
+
+## Development
+
+Run from the repo root before every push (CI runs the same command):
+
+```sh
+cargo xtask dev-check   # fmt, clippy + tests on every feature set, rustdoc, coverage
+cargo xtask coverage    # coverage gate only; add --html for target/llvm-cov/html
+```
+
+Coverage needs `rustup component add llvm-tools && cargo install cargo-llvm-cov`.
+
+Or use the dev container, which has the whole toolchain (Podman, Buildah or
+Docker; with rootful Docker add `--user "$(id -u):$(id -g)"`):
+
+```sh
+podman build -t fairway-dev .
+podman run --rm -it -v "$PWD":/work:Z fairway-dev                  # cargo xtask dev-check
+podman run --rm -it -v "$PWD":/work:Z fairway-dev cargo xtask coverage --html
+```
+
+Container builds go to `target/container/`, apart from host builds.
+
+To test the NEON backend from an x86_64 machine with `qemu-aarch64`:
+
+```sh
+rustup target add aarch64-unknown-linux-musl
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUNNER=qemu-aarch64 \
+  cargo test --target aarch64-unknown-linux-musl --package fairway-hash
+```
+
+The tests port the upstream C++ suite: `tests/highwayhash_test.rs`
+(`highwayhash_test.cc`: golden vectors and `HighwayHashCat` on every backend),
+`tests/sip_hash_test.rs` (`sip_hash_test.cc`) and `tests/fuzz_test.rs`
+(deterministic versions of the two libFuzzer targets, cross-checking every
+backend against the portable one). Upstream's `vector_test` and
+`data_parallel_test` cover C++ vector classes and a thread pool, which this
+port doesn't have.
+
+## License
+
+Apache-2.0, same as upstream. See `LICENSE`.
