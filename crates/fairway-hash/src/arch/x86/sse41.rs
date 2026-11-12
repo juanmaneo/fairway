@@ -301,6 +301,11 @@ mod tests {
 
     #[test]
     fn sse41_golden() {
+        // The coverage build (cargo-llvm-cov sets `cfg(coverage)`) assumes
+        // SSE4.1 — every machine that measures coverage has it — so the skip
+        // guard is compiled out there; the unexecuted `return` would
+        // otherwise count as an uncovered line.
+        #[cfg(not(coverage))]
         if !super::super::has_sse41() {
             return;
         }

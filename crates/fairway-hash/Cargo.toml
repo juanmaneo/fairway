@@ -20,6 +20,11 @@ portable-only = []
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
+# cargo-llvm-cov sets `--cfg coverage` for the measured build; the x86
+# backend tests compile out their CPU-detection skip guards under it (the
+# machines that measure coverage have AVX2/SSE4.1) so the skipped `return`
+# lines don't count against coverage.
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage)"] }
 
 [lints.clippy]
 undocumented_unsafe_blocks = "deny"

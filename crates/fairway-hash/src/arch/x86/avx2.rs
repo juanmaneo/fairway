@@ -133,6 +133,11 @@ mod tests {
 
     #[test]
     fn avx2_golden64() {
+        // The coverage build (cargo-llvm-cov sets `cfg(coverage)`) assumes
+        // AVX2 — every machine that measures coverage has it — so the skip
+        // guard is compiled out there; the unexecuted `return` would
+        // otherwise count as an uncovered line.
+        #[cfg(not(coverage))]
         if !super::super::has_avx2() {
             return;
         }
@@ -162,6 +167,9 @@ mod tests {
 
     #[test]
     fn avx2_golden128_256() {
+        // As in `avx2_golden64`: the skip guard is compiled out under
+        // `cfg(coverage)` (coverage machines have AVX2).
+        #[cfg(not(coverage))]
         if !super::super::has_avx2() {
             return;
         }

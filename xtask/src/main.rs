@@ -25,12 +25,12 @@ const FEATURE_SETS: &[&[&str]] = &[
     &["--no-default-features", "--features", "portable-only"],
 ];
 
-/// Coverage floor (percent). Raise these as coverage improves; never lower
-/// them to make a push pass. They are below 100 only because some branches
-/// depend on the CPU (e.g. SSE4.1-without-AVX2 dispatch, skipped tests on
-/// CPUs without AVX2).
-const MIN_LINES: &str = "99";
-const MIN_REGIONS: &str = "99";
+/// Coverage floor (percent): 100 — every file, line and region must be
+/// covered. CPU-dependent branches are either unit-tested through pure
+/// dispatch logic (`best_backend_for`) or compiled out under `cfg(coverage)`,
+/// which cargo-llvm-cov sets for the measured build.
+const MIN_LINES: &str = "100";
+const MIN_REGIONS: &str = "100";
 const MIN_FUNCTIONS: &str = "100";
 
 type Result<T = ()> = std::result::Result<T, String>;
@@ -109,6 +109,8 @@ fn coverage(html: bool) -> Result {
     } else {
         "--show-missing-lines"
     });
+    // No `RUSTFLAGS` needed: cargo-llvm-cov itself sets `--cfg=coverage` for
+    // the instrumented build.
     cargo(&args, &[])?;
     if html {
         let target_dir = env::var("CARGO_TARGET_DIR").unwrap_or_else(|_| "target".into());

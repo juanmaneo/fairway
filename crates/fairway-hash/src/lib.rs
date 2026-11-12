@@ -88,22 +88,34 @@ impl Backend {
     }
 }
 
+/// Pure x86_64 backend-selection logic, kept separate from CPU detection so
+/// every branch is unit-testable on any machine (see `backend_tests`);
+/// `best_backend` only adds the platform rules on top.
+#[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
+fn best_backend_for(avx2: bool, sse41: bool) -> Backend {
+    if avx2 {
+        Backend::Avx2
+    } else if sse41 {
+        Backend::Sse41
+    } else {
+        Backend::Portable
+    }
+}
+
 /// Best backend available on the current CPU (runtime-detected on x86_64).
 pub fn best_backend() -> Backend {
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
     {
-        if arch::x86::has_avx2() {
-            return Backend::Avx2;
-        }
-        if arch::x86::has_sse41() {
-            return Backend::Sse41;
-        }
+        best_backend_for(arch::x86::has_avx2(), arch::x86::has_sse41())
     }
     #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
     {
         Backend::Neon
     }
-    #[cfg(not(all(target_arch = "aarch64", not(feature = "portable-only"))))]
+    #[cfg(not(any(
+        all(target_arch = "x86_64", not(feature = "portable-only")),
+        all(target_arch = "aarch64", not(feature = "portable-only")),
+    )))]
     {
         Backend::Portable
     }
@@ -339,4 +351,28 @@ pub fn fairway256(key: Key, bytes: &[u8]) -> [u64; 4] {
 /// Portable scalar implementation, always available regardless of CPU.
 pub mod scalar {
     pub use crate::portable::{hash128, hash256, hash64, State};
+}
+
+#[cfg(all(test, target_arch = "x86_64", not(feature = "portable-only")))]
+mod backend_tests {
+    use super::Backend;
+
+    // Exercising the dispatch logic with synthetic inputs keeps every region
+    // covered even on AVX2 machines, where only the `Avx2` arm is live.
+
+    #[test]
+    fn avx2_wins_over_sse41() {
+        assert_eq!(super::best_backend_for(true, true), Backend::Avx2);
+        assert_eq!(super::best_backend_for(true, false), Backend::Avx2);
+    }
+
+    #[test]
+    fn sse41_used_when_avx2_is_missing() {
+        assert_eq!(super::best_backend_for(false, true), Backend::Sse41);
+    }
+
+    #[test]
+    fn portable_used_when_no_simd() {
+        assert_eq!(super::best_backend_for(false, false), Backend::Portable);
+    }
 }
