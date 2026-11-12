@@ -76,12 +76,12 @@ fn dev_check() -> Result {
     }
     for features in FEATURE_SETS {
         cargo(
-            &[&["test", "--package", "fairway"], *features].concat(),
+            &[&["test", "--package", "fairway-hash"], *features].concat(),
             &[],
         )?;
     }
     cargo(
-        &["doc", "--package", "fairway", "--no-deps"],
+        &["doc", "--package", "fairway-hash", "--no-deps"],
         &[("RUSTDOCFLAGS", "-D warnings")],
     )?;
     coverage(false)
@@ -96,7 +96,7 @@ fn coverage(html: bool) -> Result {
     let mut args = vec![
         "llvm-cov",
         "--package",
-        "fairway",
+        "fairway-hash",
         "--fail-under-lines",
         MIN_LINES,
         "--fail-under-regions",

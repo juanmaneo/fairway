@@ -2,8 +2,8 @@
 
 mod common;
 
-use fairway::vectors::{SIP_HASH_OUTPUT, SIP_KEY};
-use fairway::{sip_hash, sip_hash13, SipHashKey};
+use fairway_hash::vectors::{SIP_HASH_OUTPUT, SIP_KEY};
+use fairway_hash::{sip_hash, sip_hash13, SipHashKey};
 
 /// Known-good SipHash-2-4 output from D. Bernstein, for the empty string,
 /// `00`, `00 01`, ... up to 63 bytes.

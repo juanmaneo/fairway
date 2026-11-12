@@ -1,10 +1,10 @@
-use fairway::{fairway128, fairway256, fairway64, sip_hash, Key, SipHashKey};
+use fairway_hash::{fairway128, fairway256, fairway64, sip_hash, Key, SipHashKey};
 
 fn main() {
     let key = Key([1, 2, 3, 4]);
     let data = b"The quick brown fox jumps over the lazy dog";
 
-    println!("backend: {}", fairway::best_backend().name());
+    println!("backend: {}", fairway_hash::best_backend().name());
     println!("fairway64:  {:016x}", fairway64(key, data));
     println!(
         "fairway128: {:016x}{:016x}",

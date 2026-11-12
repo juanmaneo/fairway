@@ -2,7 +2,7 @@
 
 #![allow(dead_code)] // Each test binary uses a different subset.
 
-use fairway::{Backend, HighwayHasher, Key};
+use fairway_hash::{Backend, HighwayHasher, Key};
 
 /// Every backend, in the order the C++ `InstructionSets::RunAll` visits them.
 pub const ALL_BACKENDS: [Backend; 4] = [

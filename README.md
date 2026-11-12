@@ -26,7 +26,7 @@ reference vectors, and the streaming "cat" equivalence test) on every backend.
 ## Usage
 
 ```rust
-use fairway::{HighwayHasher, Key};
+use fairway_hash::{HighwayHasher, Key};
 
 let key = Key([1, 2, 3, 4]);
 
@@ -39,16 +39,16 @@ let h128: [u64; 2] = h.finalize128();
 let h256: [u64; 4] = h.finalize256();
 
 // One-shot helpers (best backend for the current CPU):
-use fairway::{fairway64, fairway128, fairway256};
+use fairway_hash::{fairway64, fairway128, fairway256};
 assert_eq!(fairway64(key, b"abc"), fairway64(key, b"abc"));
 
 // Force a specific backend (e.g. for cross-checking):
-use fairway::{Backend, HighwayHasher};
+use fairway_hash::{Backend, HighwayHasher};
 let mut h = HighwayHasher::with_backend(key, Backend::Portable);
 h.update(b"abc");
 
 // SipHash (matches the reference implementation byte-for-byte):
-use fairway::{sip_hash, sip_hash13, SipHashKey};
+use fairway_hash::{sip_hash, sip_hash13, SipHashKey};
 let k = SipHashKey([0x0706050403020100, 0x0F0E0D0C0B0A0908]);
 let mac = sip_hash(k, b"message");
 let mac13 = sip_hash13(k, b"message");
@@ -99,7 +99,7 @@ To test the NEON backend from an x86_64 machine with `qemu-aarch64`:
 rustup target add aarch64-unknown-linux-musl
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
 CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUNNER=qemu-aarch64 \
-  cargo test --target aarch64-unknown-linux-musl --package fairway
+  cargo test --target aarch64-unknown-linux-musl --package fairway-hash
 ```
 
 The tests port the upstream C++ suite: `tests/highwayhash_test.rs`

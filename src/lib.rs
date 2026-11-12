@@ -14,7 +14,7 @@
 //! # Examples
 //!
 //! ```
-//! use fairway::{HighwayHasher, Key};
+//! use fairway_hash::{HighwayHasher, Key};
 //!
 //! let key = Key([1, 2, 3, 4]);
 //! let mut h = HighwayHasher::new(key);
@@ -28,7 +28,7 @@
 //! One-shot helpers use the best implementation for the current CPU:
 //!
 //! ```
-//! use fairway::{fairway64, Key};
+//! use fairway_hash::{fairway64, Key};
 //! assert_eq!(fairway64(Key([1, 2, 3, 4]), b"abc"), fairway64(Key([1, 2, 3, 4]), b"abc"));
 //! ```
 

@@ -10,7 +10,7 @@
 mod common;
 
 use common::{backends, Rng};
-use fairway::{scalar, sip_hash, sip_hash13, HighwayHasher, Key, SipHashKey};
+use fairway_hash::{scalar, sip_hash, sip_hash13, HighwayHasher, Key, SipHashKey};
 
 const CASES: usize = 2_000;
 const MAX_LEN: usize = 300;

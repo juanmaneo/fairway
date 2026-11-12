@@ -5,8 +5,8 @@
 mod common;
 
 use common::{backends, golden_input};
-use fairway::vectors::{EXPECTED128, EXPECTED256, EXPECTED64, KEY64};
-use fairway::{fairway128, fairway256, fairway64, scalar, Backend, HighwayHasher, Key};
+use fairway_hash::vectors::{EXPECTED128, EXPECTED256, EXPECTED64, KEY64};
+use fairway_hash::{fairway128, fairway256, fairway64, scalar, Backend, HighwayHasher, Key};
 
 /// The three `HHResult64/128/256` instantiations of the C++ templates.
 #[derive(Clone, Copy, Debug)]
@@ -226,7 +226,7 @@ fn unavailable_backend_falls_back_to_portable() {
         };
         assert_eq!(h.backend(), expected);
     }
-    assert!(available.contains(&fairway::best_backend()));
+    assert!(available.contains(&fairway_hash::best_backend()));
 }
 
 #[test]
