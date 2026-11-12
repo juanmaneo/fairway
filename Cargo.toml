@@ -8,8 +8,9 @@ edition = "2021"
 # `<[T]>::as_chunks` is stable since 1.88.
 rust-version = "1.88"
 license = "Apache-2.0"
+# crates.io derives `homepage` from `repository` on GitHub; setting it
+# explicitly triggers the redundant_homepage warning.
 repository = "https://github.com/juanmaneo/fairway"
-homepage = "https://github.com/juanmaneo/fairway"
 
 [profile.release]
 lto = true

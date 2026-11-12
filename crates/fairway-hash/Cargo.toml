@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 documentation = "https://docs.rs/fairway-hash"
 readme = "README.md"
 keywords = ["hash", "highwayhash", "siphash", "simd", "prf"]

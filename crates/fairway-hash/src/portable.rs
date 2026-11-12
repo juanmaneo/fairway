@@ -151,17 +151,17 @@ impl State {
         let size_mod32 = bytes.len();
         debug_assert!((1..32).contains(&size_mod32));
         let mod32_pair = ((size_mod32 as u64) << 32) + size_mod32 as u64;
-        for lane in 0..4 {
-            self.v0[lane] = self.v0[lane].wrapping_add(mod32_pair);
+        for lane in &mut self.v0 {
+            *lane = lane.wrapping_add(mod32_pair);
         }
         // Rotate each 32-bit half of v1 left by size_mod32 bits.
-        for lane in 0..4 {
-            let lo = self.v1[lane] as u32;
-            let hi = (self.v1[lane] >> 32) as u32;
+        for lane in &mut self.v1 {
+            let lo = *lane as u32;
+            let hi = (*lane >> 32) as u32;
             let c = size_mod32 as u32;
             let lo_r = lo.rotate_left(c);
             let hi_r = hi.rotate_left(c);
-            self.v1[lane] = ((hi_r as u64) << 32) | lo_r as u64;
+            *lane = ((hi_r as u64) << 32) | lo_r as u64;
         }
 
         let size_mod4 = size_mod32 & 3;
