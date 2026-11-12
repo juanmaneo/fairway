@@ -25,11 +25,13 @@ const INIT1: [u64; 4] = [
 
 #[inline(always)]
 unsafe fn rotate64_by32(v: __m256i) -> __m256i {
+    // SAFETY: AVX2 is required for all `_mm256_*` intrinsics; callers guarantee it.
     unsafe { _mm256_shuffle_epi32(v, 0b10_11_00_01) }
 }
 
 #[inline(always)]
 unsafe fn rotate32_by(v: __m256i, count: __m256i) -> __m256i {
+    // SAFETY: AVX2 is required for all `_mm256_*` intrinsics; callers guarantee it.
     unsafe {
         let left = _mm256_sllv_epi32(v, count);
         let right = _mm256_srlv_epi32(v, _mm256_sub_epi32(_mm256_set1_epi32(32), count));
@@ -39,6 +41,7 @@ unsafe fn rotate32_by(v: __m256i, count: __m256i) -> __m256i {
 
 #[inline(always)]
 unsafe fn permute(v: __m256i) -> __m256i {
+    // SAFETY: AVX2 is required for `_mm256_permutevar8x32_epi32`; callers guarantee it.
     unsafe {
         // 32-bit lane indices [5, 4, 7, 6, 1, 0, 3, 2] (out lane j takes v lane
         // idx[j]); equivalent to the portable Permute [rot32(v[2]), rot32(v[3]),
@@ -50,6 +53,7 @@ unsafe fn permute(v: __m256i) -> __m256i {
 
 #[inline(always)]
 unsafe fn zipper_merge(v: __m256i) -> __m256i {
+    // SAFETY: AVX2 is required for `_mm256_shuffle_epi8`; callers guarantee it.
     unsafe {
         // _mm256_shuffle_epi8 control words per 128-bit lane; lane0 ctrl is
         // the low 8 bytes of the low 64-bit word of each 128-bit half.
@@ -66,6 +70,7 @@ unsafe fn zipper_merge(v: __m256i) -> __m256i {
 /// (Lemire's reduction, see `XorByShift128Left12`).
 #[inline(always)]
 unsafe fn xor_by_shift128_left12(ba: __m256i, out: &mut __m256i) {
+    // SAFETY: AVX2 is required for all `_mm256_*` intrinsics; callers guarantee it.
     unsafe {
         let zero = _mm256_xor_si256(ba, ba);
         let top_bits2 = _mm256_srli_epi64(ba, 64 - 2);
@@ -89,24 +94,30 @@ unsafe fn xor_by_shift128_left12(ba: __m256i, out: &mut __m256i) {
 #[inline(always)]
 unsafe fn modular_reduction(b32a32: __m256i, b10a10: __m256i) -> __m256i {
     let mut out = b10a10;
+    // SAFETY: the caller of this function guarantees AVX2 support.
     unsafe { xor_by_shift128_left12(b32a32, &mut out) };
     out
 }
 
 /// 32-bit lane mask: lane n is all-ones if size > kSizeOffset + 4n + 3.
 #[inline(always)]
+// SSE2 is part of x86_64, so the `_mm_set_epi32` calls below are safe.
+#[allow(unsafe_op_in_unsafe_fn)]
 unsafe fn int_mask(size: __m128i, size_offset: i32) -> __m128i {
     let comparands = if size_offset == 16 {
         _mm_set_epi32(31, 27, 23, 19)
     } else {
         _mm_set_epi32(15, 11, 7, 3)
     };
+    // SAFETY: SSE2 is part of x86_64; `_mm_cmpgt_epi32` needs no extra feature.
     unsafe { _mm_cmpgt_epi32(size, comparands) }
 }
 
 /// Masked 32-bit load (AVX2 maskload); lanes with mask==0 are not read.
 #[inline(always)]
 unsafe fn masked_load_int(from: *const i32, mask: __m128i) -> __m128i {
+    // SAFETY: AVX2 is required for `_mm_maskload_epi32`; callers guarantee it.
+    // Masked-off lanes are not read, so `from` only needs the masked lanes in bounds.
     unsafe { _mm_maskload_epi32(from, mask) }
 }
 
@@ -128,15 +139,20 @@ mod tests {
         let in_buf = inputs();
         let key = Key(KEY64);
         for size in 0..=64usize {
+            // SAFETY: the test returned early unless the CPU has AVX2.
             let mut s = unsafe { State::new(key) };
             let (chunks, rest) = in_buf[..size].as_chunks::<32>();
             for c in chunks {
+                // SAFETY: AVX2 detected above.
                 unsafe { s.update_packet(c) };
             }
             if !rest.is_empty() {
+                // SAFETY: AVX2 detected above; `rest` is 1..=31 bytes.
                 unsafe { s.update_remainder(rest) };
             }
+            // SAFETY: AVX2 detected above.
             assert_eq!(
+                // SAFETY: AVX2 detected above.
                 unsafe { s.finalize64() },
                 EXPECTED64[size],
                 "avx2 64-bit at {size}"
@@ -152,28 +168,38 @@ mod tests {
         let in_buf = inputs();
         let key = Key(KEY64);
         for size in 0..=64usize {
+            // SAFETY: the test returned early unless the CPU has AVX2.
             let mut s = unsafe { State::new(key) };
             let (chunks, rest) = in_buf[..size].as_chunks::<32>();
             for c in chunks {
+                // SAFETY: AVX2 detected above.
                 unsafe { s.update_packet(c) };
             }
             if !rest.is_empty() {
+                // SAFETY: AVX2 detected above; `rest` is 1..=31 bytes.
                 unsafe { s.update_remainder(rest) };
             }
+            // SAFETY: AVX2 detected above.
             assert_eq!(
+                // SAFETY: AVX2 detected above.
                 unsafe { s.finalize128() },
                 EXPECTED128[size],
                 "avx2 128-bit at {size}"
             );
+            // SAFETY: AVX2 detected above.
             let mut s = unsafe { State::new(key) };
             let (chunks, rest) = in_buf[..size].as_chunks::<32>();
             for c in chunks {
+                // SAFETY: AVX2 detected above.
                 unsafe { s.update_packet(c) };
             }
             if !rest.is_empty() {
+                // SAFETY: AVX2 detected above; `rest` is 1..=31 bytes.
                 unsafe { s.update_remainder(rest) };
             }
+            // SAFETY: AVX2 detected above.
             assert_eq!(
+                // SAFETY: AVX2 detected above.
                 unsafe { s.finalize256() },
                 EXPECTED256[size],
                 "avx2 256-bit at {size}"
@@ -195,6 +221,8 @@ impl State {
     /// # Safety
     /// CPU must support AVX2.
     pub unsafe fn new(key: Key) -> Self {
+        // SAFETY: the caller guarantees AVX2 support; the unaligned loads read
+        // only the 32 bytes of the key/array constants.
         unsafe {
             let init0 = _mm256_loadu_si256(INIT0.as_ptr() as *const __m256i);
             let init1 = _mm256_loadu_si256(INIT1.as_ptr() as *const __m256i);
@@ -212,6 +240,8 @@ impl State {
     /// CPU must support AVX2.
     #[inline]
     pub unsafe fn update_packet(&mut self, packet: &[u8; 32]) {
+        // SAFETY: the caller guarantees AVX2 support; the unaligned load reads
+        // exactly the 32 bytes of `packet`.
         unsafe {
             let p = _mm256_loadu_si256(packet.as_ptr() as *const __m256i);
             self.update(p);
@@ -220,6 +250,7 @@ impl State {
 
     #[inline(always)]
     unsafe fn update(&mut self, packet: __m256i) {
+        // SAFETY: the caller guarantees AVX2 support.
         unsafe {
             self.v1 = _mm256_add_epi64(self.v1, packet);
             self.v1 = _mm256_add_epi64(self.v1, self.mul0);
@@ -242,6 +273,8 @@ impl State {
     pub unsafe fn update_remainder(&mut self, bytes: &[u8]) {
         let size_mod32 = bytes.len();
         debug_assert!((1..32).contains(&size_mod32));
+        // SAFETY: the caller guarantees AVX2 support and `bytes.len()` in 1..=31;
+        // the loads read at most `bytes` plus the `load3` overlap, all in bounds.
         unsafe {
             let size256 = _mm256_set1_epi32(size_mod32 as i32);
             self.v0 = _mm256_add_epi64(self.v0, _mm256_shuffle_epi32(size256, 0b00_00_00_00));
@@ -273,6 +306,7 @@ impl State {
     /// # Safety
     /// CPU must support AVX2.
     pub unsafe fn finalize64(&mut self) -> u64 {
+        // SAFETY: the caller guarantees AVX2 support.
         unsafe {
             for _ in 0..4 {
                 let p = permute(self.v0);
@@ -288,6 +322,7 @@ impl State {
     /// # Safety
     /// CPU must support AVX2.
     pub unsafe fn finalize128(&mut self) -> [u64; 2] {
+        // SAFETY: the caller guarantees AVX2 support.
         unsafe {
             for _ in 0..6 {
                 let p = permute(self.v0);
@@ -305,6 +340,7 @@ impl State {
     /// # Safety
     /// CPU must support AVX2.
     pub unsafe fn finalize256(&mut self) -> [u64; 4] {
+        // SAFETY: the caller guarantees AVX2 support.
         unsafe {
             for _ in 0..10 {
                 let p = permute(self.v0);

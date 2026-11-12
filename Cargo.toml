@@ -1,8 +1,15 @@
-# Virtual workspace root: the publishable library lives in crates/fairway-hash,
-# the dev automation in xtask. Nothing is published from this manifest.
 [workspace]
-members = ["crates/fairway-hash", "xtask"]
 resolver = "2"
+members = ["crates/fairway-hash", "xtask"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# `<[T]>::as_chunks` is stable since 1.88.
+rust-version = "1.88"
+license = "Apache-2.0"
+repository = "https://github.com/juanmaneo/fairway"
+homepage = "https://github.com/juanmaneo/fairway"
 
 [profile.release]
 lto = true

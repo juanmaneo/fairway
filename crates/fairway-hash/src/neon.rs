@@ -15,12 +15,14 @@ const INIT1_H: (u64, u64) = (0x452821e638d01377, 0xbe5466cf34e90c6c);
 #[inline(always)]
 fn v2(a: (u64, u64)) -> uint64x2_t {
     // lane0 = low = a.1, lane1 = high = a.0
+    // SAFETY: NEON is always available on aarch64; both lanes are in bounds.
     unsafe { vsetq_lane_u64(a.1, vsetq_lane_u64(a.0, vdupq_n_u64(0), 1), 0) }
 }
 
 /// Swap 32-bit halves of each 64-bit lane.
 #[inline(always)]
 fn rotate64_by32(v: uint64x2_t) -> uint64x2_t {
+    // SAFETY: NEON is always available on aarch64.
     unsafe { vreinterpretq_u64_u32(vrev64q_u32(vreinterpretq_u32_u64(v))) }
 }
 
@@ -28,6 +30,7 @@ fn rotate64_by32(v: uint64x2_t) -> uint64x2_t {
 fn zipper_merge(v: uint64x2_t) -> uint64x2_t {
     #[rustfmt::skip]
     const POS: [u8; 16] = [3, 12, 2, 5, 14, 1, 15, 0, 11, 4, 10, 13, 9, 6, 8, 7];
+    // SAFETY: NEON is always available on aarch64; `POS` is a 16-byte constant.
     unsafe {
         let tbl = vld1q_u8(POS.as_ptr());
         vreinterpretq_u64_u8(vqtbl1q_u8(vreinterpretq_u8_u64(v), tbl))
@@ -37,6 +40,8 @@ fn zipper_merge(v: uint64x2_t) -> uint64x2_t {
 /// Zero-initialized vector with the lower 0/4/8/12 bytes of `bytes` loaded.
 #[inline(always)]
 unsafe fn load_multiple_of_four(bytes: *const u8, size: usize) -> uint64x2_t {
+    // SAFETY: the caller guarantees that `bytes..bytes+size` is readable; only
+    // whole 4-byte words within `size` are read. NEON is always available.
     unsafe {
         let words = bytes as *const u32;
         let mask_pattern = [0xFFFFFFFFu64, 0];
@@ -64,6 +69,7 @@ unsafe fn load_multiple_of_four(bytes: *const u8, size: usize) -> uint64x2_t {
 /// XORs x << 1 and x << 2 into `out` after clearing the upper two bits of x.
 #[inline(always)]
 fn xor_by_shift128_left12(x: uint64x2_t, out: &mut uint64x2_t) {
+    // SAFETY: NEON is always available on aarch64.
     unsafe {
         let zero64 = vdupq_n_u64(0);
         // 0x80000000 in the top 32-bit lane => lane1 = 0x8000000000000000
@@ -105,6 +111,8 @@ pub struct State {
 
 impl State {
     pub fn new(key: Key) -> Self {
+        // SAFETY: NEON is always available on aarch64; the loads read exactly
+        // the 32 bytes of the key.
         unsafe {
             let key_l = vld1q_u64(key.0.as_ptr());
             let key_h = vld1q_u64(key.0.as_ptr().add(2));
@@ -125,6 +133,8 @@ impl State {
 
     #[inline]
     pub fn update_packet(&mut self, packet: &[u8; 32]) {
+        // SAFETY: NEON is always available on aarch64; the loads read exactly
+        // the 32 bytes of `packet`.
         unsafe {
             let packet_l = vld1q_u64(packet.as_ptr() as *const u64);
             let packet_h = vld1q_u64(packet.as_ptr().add(16) as *const u64);
@@ -134,6 +144,7 @@ impl State {
 
     #[inline(always)]
     fn update(&mut self, packet_h: uint64x2_t, packet_l: uint64x2_t) {
+        // SAFETY: NEON is always available on aarch64.
         unsafe {
             self.v1_l = vaddq_u64(self.v1_l, packet_l);
             self.v1_h = vaddq_u64(self.v1_h, packet_h);
@@ -167,6 +178,8 @@ impl State {
     pub fn update_remainder(&mut self, bytes: &[u8]) {
         let size_mod32 = bytes.len();
         debug_assert!((1..32).contains(&size_mod32));
+        // SAFETY: NEON is always available on aarch64; the loads read at most
+        // `bytes` plus the `load3` overlap, all in bounds.
         unsafe {
             let vsize = vdupq_n_s32(size_mod32 as i32);
             let shift_right = vdupq_n_s32(size_mod32 as i32 - 32);
@@ -213,6 +226,7 @@ impl State {
         for _ in 0..4 {
             self.permute_and_update();
         }
+        // SAFETY: NEON is always available on aarch64.
         unsafe {
             let sum0 = vaddq_u64(self.v0_l, self.mul0_l);
             let sum1 = vaddq_u64(self.v1_l, self.mul1_l);
@@ -225,6 +239,7 @@ impl State {
         for _ in 0..6 {
             self.permute_and_update();
         }
+        // SAFETY: NEON is always available on aarch64.
         unsafe {
             let sum0 = vaddq_u64(self.v0_l, self.mul0_l);
             let sum1 = vaddq_u64(self.v1_h, self.mul1_h);
@@ -237,6 +252,7 @@ impl State {
         for _ in 0..10 {
             self.permute_and_update();
         }
+        // SAFETY: NEON is always available on aarch64.
         unsafe {
             let sum0_l = vaddq_u64(self.v0_l, self.mul0_l);
             let sum1_l = vaddq_u64(self.v1_l, self.mul1_l);

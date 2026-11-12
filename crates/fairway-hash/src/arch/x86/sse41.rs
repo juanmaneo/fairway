@@ -18,18 +18,21 @@ const INIT1_H: (u64, u64) = (0x452821e638d01377, 0xbe5466cf34e90c6c);
 
 #[inline(always)]
 unsafe fn v2(a: (u64, u64)) -> __m128i {
+    // SAFETY: SSE2 is part of x86_64.
     unsafe { _mm_set_epi64x(a.0 as i64, a.1 as i64) }
 }
 
 /// Swap 32-bit halves of each 64-bit lane.
 #[inline(always)]
 unsafe fn rotate64_by32(v: __m128i) -> __m128i {
+    // SAFETY: SSE2 is part of x86_64.
     unsafe { _mm_shuffle_epi32(v, 0b10_11_00_01) }
 }
 
 /// Rotates 32-bit lanes by `count` bits.
 #[inline(always)]
 unsafe fn rotate32_by(v: __m128i, count: i64) -> __m128i {
+    // SAFETY: SSE2 is part of x86_64.
     unsafe {
         let cl = _mm_cvtsi64_si128(count);
         let cr = _mm_cvtsi64_si128(32 - count);
@@ -41,6 +44,7 @@ unsafe fn rotate32_by(v: __m128i, count: i64) -> __m128i {
 
 #[inline(always)]
 unsafe fn zipper_merge(v: __m128i) -> __m128i {
+    // SAFETY: SSE4.1 is required for `_mm_shuffle_epi8`; callers guarantee it.
     unsafe {
         // Desired byte permutation (output byte j <- input byte perm[j]):
         //   lane0: 3 12 2 5 14 1 15 0, lane1: 11 4 10 13 9 6 8 7
@@ -55,6 +59,8 @@ unsafe fn zipper_merge(v: __m128i) -> __m128i {
 /// (replacement for AVX2 maskload).
 #[inline(always)]
 unsafe fn load_multiple_of_four(bytes: *const u8, size: usize) -> __m128i {
+    // SAFETY: the caller guarantees SSE4.1 support and that `bytes..bytes+size`
+    // is readable; only whole 4-byte words within `size` are read.
     unsafe {
         let words = bytes as *const u32;
         let mut mask4 = _mm_cvtsi64_si128(0xFFFFFFFFu64 as i64);
@@ -77,6 +83,7 @@ unsafe fn load_multiple_of_four(bytes: *const u8, size: usize) -> __m128i {
 /// XORs x << 1 and x << 2 into `out` after clearing the upper two bits of x.
 #[inline(always)]
 unsafe fn xor_by_shift128_left12(x: __m128i, out: &mut __m128i) {
+    // SAFETY: SSE2 is part of x86_64.
     unsafe {
         let zero = _mm_setzero_si128();
         let sign_bit128 = _mm_insert_epi32(zero, 0x80000000u32 as i32, 3);
@@ -98,6 +105,7 @@ unsafe fn xor_by_shift128_left12(x: __m128i, out: &mut __m128i) {
 #[inline(always)]
 unsafe fn modular_reduction(a32_unmasked: __m128i, a10: __m128i) -> __m128i {
     let mut out = a10;
+    // SAFETY: the caller guarantees SSE4.1 support.
     unsafe { xor_by_shift128_left12(a32_unmasked, &mut out) };
     out
 }
@@ -119,6 +127,8 @@ impl State {
     /// # Safety
     /// CPU must support SSE4.1.
     pub unsafe fn new(key: Key) -> Self {
+        // SAFETY: the caller guarantees SSE4.1 support; the unaligned loads read
+        // exactly the 32 bytes of the key.
         unsafe {
             let key_l = _mm_loadu_si128(key.0.as_ptr() as *const __m128i);
             let key_h = _mm_loadu_si128(key.0.as_ptr().add(2) as *const __m128i);
@@ -141,6 +151,8 @@ impl State {
     /// CPU must support SSE4.1.
     #[inline]
     pub unsafe fn update_packet(&mut self, packet: &[u8; 32]) {
+        // SAFETY: the caller guarantees SSE4.1 support; the unaligned loads read
+        // exactly the 32 bytes of `packet`.
         unsafe {
             let packet_l = _mm_loadu_si128(packet.as_ptr() as *const __m128i);
             let packet_h = _mm_loadu_si128(packet.as_ptr().add(16) as *const __m128i);
@@ -150,6 +162,8 @@ impl State {
 
     #[inline(always)]
     unsafe fn update(&mut self, packet_h: __m128i, packet_l: __m128i) {
+        // SAFETY: the caller guarantees SSE4.1 support (`_mm_mul_epu32`,
+        // `_mm_shuffle_epi8` via `zipper_merge`).
         unsafe {
             self.v1_l = _mm_add_epi64(self.v1_l, packet_l);
             self.v1_h = _mm_add_epi64(self.v1_h, packet_h);
@@ -185,6 +199,8 @@ impl State {
     pub unsafe fn update_remainder(&mut self, bytes: &[u8]) {
         let size_mod32 = bytes.len();
         debug_assert!((1..32).contains(&size_mod32));
+        // SAFETY: the caller guarantees SSE4.1 support and `bytes.len()` in
+        // 1..=31; the loads read at most `bytes` plus the `load3` overlap, all in bounds.
         unsafe {
             let vsize = _mm_shuffle_epi32(_mm_set1_epi32(size_mod32 as i32), 0b00_00_00_00);
             self.v0_l = _mm_add_epi64(self.v0_l, vsize);
@@ -213,6 +229,7 @@ impl State {
 
     #[inline(always)]
     unsafe fn permute_and_update(&mut self) {
+        // SAFETY: the caller guarantees SSE4.1 support.
         unsafe {
             self.update(rotate64_by32(self.v0_l), rotate64_by32(self.v0_h));
         }
@@ -221,6 +238,7 @@ impl State {
     /// # Safety
     /// CPU must support SSE4.1.
     pub unsafe fn finalize64(&mut self) -> u64 {
+        // SAFETY: the caller guarantees SSE4.1 support.
         unsafe {
             for _ in 0..4 {
                 self.permute_and_update();
@@ -235,6 +253,7 @@ impl State {
     /// # Safety
     /// CPU must support SSE4.1.
     pub unsafe fn finalize128(&mut self) -> [u64; 2] {
+        // SAFETY: the caller guarantees SSE4.1 support.
         unsafe {
             for _ in 0..6 {
                 self.permute_and_update();
@@ -251,6 +270,7 @@ impl State {
     /// # Safety
     /// CPU must support SSE4.1.
     pub unsafe fn finalize256(&mut self) -> [u64; 4] {
+        // SAFETY: the caller guarantees SSE4.1 support.
         unsafe {
             for _ in 0..10 {
                 self.permute_and_update();
@@ -287,41 +307,56 @@ mod tests {
         let in_buf = inputs();
         let key = Key(KEY64);
         for size in 0..=64usize {
+            // SAFETY: the test returned early unless the CPU has SSE4.1.
             let mut s = unsafe { State::new(key) };
             let (chunks, rest) = in_buf[..size].as_chunks::<32>();
             for c in chunks {
+                // SAFETY: SSE4.1 detected above.
                 unsafe { s.update_packet(c) };
             }
             if !rest.is_empty() {
+                // SAFETY: SSE4.1 detected above; `rest` is 1..=31 bytes.
                 unsafe { s.update_remainder(rest) };
             }
+            // SAFETY: SSE4.1 detected above.
             assert_eq!(
+                // SAFETY: SSE4.1 detected above.
                 unsafe { s.finalize64() },
                 EXPECTED64[size],
                 "sse41 64-bit at {size}"
             );
+            // SAFETY: SSE4.1 detected above.
             let mut s = unsafe { State::new(key) };
             let (chunks, rest) = in_buf[..size].as_chunks::<32>();
             for c in chunks {
+                // SAFETY: SSE4.1 detected above.
                 unsafe { s.update_packet(c) };
             }
             if !rest.is_empty() {
+                // SAFETY: SSE4.1 detected above; `rest` is 1..=31 bytes.
                 unsafe { s.update_remainder(rest) };
             }
+            // SAFETY: SSE4.1 detected above.
             assert_eq!(
+                // SAFETY: SSE4.1 detected above.
                 unsafe { s.finalize128() },
                 EXPECTED128[size],
                 "sse41 128-bit at {size}"
             );
+            // SAFETY: SSE4.1 detected above.
             let mut s = unsafe { State::new(key) };
             let (chunks, rest) = in_buf[..size].as_chunks::<32>();
             for c in chunks {
+                // SAFETY: SSE4.1 detected above.
                 unsafe { s.update_packet(c) };
             }
             if !rest.is_empty() {
+                // SAFETY: SSE4.1 detected above; `rest` is 1..=31 bytes.
                 unsafe { s.update_remainder(rest) };
             }
+            // SAFETY: SSE4.1 detected above.
             assert_eq!(
+                // SAFETY: SSE4.1 detected above.
                 unsafe { s.finalize256() },
                 EXPECTED256[size],
                 "sse41 256-bit at {size}"
