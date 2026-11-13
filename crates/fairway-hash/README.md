@@ -69,6 +69,10 @@ let mac13 = sip_hash13(k, b"message");
   in use.
 - Without `std`, SIMD backends are only used when enabled at compile time
   (e.g. `-C target-feature=+avx2`), since runtime detection needs `std`.
+- The low-level `avx2::State` / `sse41::State` types are `unsafe` and only run
+  at full speed when called from a function that enables the matching feature
+  (`#[target_feature(enable = "avx2")]`); `HighwayHasher` and the one-shot
+  helpers already do this for you.
 - MSRV: Rust 1.88.
 
 ## Development
@@ -78,6 +82,12 @@ Run from the repo root before every push (CI runs the same command):
 ```sh
 cargo xtask dev-check   # fmt, clippy + tests on every feature set, rustdoc, coverage
 cargo xtask coverage    # coverage gate only; add --html for target/llvm-cov/html
+```
+
+Throughput of every backend on a range of input sizes:
+
+```sh
+cargo run --release --example bench
 ```
 
 Coverage needs `rustup component add llvm-tools && cargo install cargo-llvm-cov`.
