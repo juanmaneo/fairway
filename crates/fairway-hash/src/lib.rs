@@ -61,7 +61,7 @@
 //! The SipHash family is included too: [`sip_hash`] and [`sip_hash13`], and
 //! the 256-bit-keyed tree variants [`sip_tree_hash`] and [`sip_tree_hash13`]
 //! (four interleaved SipHash chains over 32-byte packets, reduced to one
-//! hash, on AVX2 where available and portable code elsewhere;
+//! hash, on AVX2 or NEON where available and portable code elsewhere;
 //! [`reduce_sip_tree_hash`] combines hashes of independent chunks):
 //!
 //! ```
@@ -87,6 +87,12 @@ mod arch;
 mod batch;
 #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
 mod neon;
+#[cfg(all(
+    target_arch = "aarch64",
+    target_endian = "little",
+    not(feature = "portable-only")
+))]
+mod neon_sip_tree;
 mod portable;
 mod sip;
 #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]

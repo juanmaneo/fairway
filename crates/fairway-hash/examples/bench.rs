@@ -15,7 +15,8 @@
 //!    `fairway64_many` (interleaved) and `fairway64_many_par` (interleaved and
 //!    multi-threaded).
 //! 3. SipHash family: `sip_hash` against the portable and the best-available
-//!    (AVX2 where present) `sip_tree_hash`, with `fairway64` for reference.
+//!    (AVX2 or NEON where present) `sip_tree_hash`, with `fairway64` for
+//!    reference.
 
 use fairway_hash::{
     fairway64, fairway64_many, fairway64_many_par, scalar, sip_hash, sip_tree_hash, Backend,

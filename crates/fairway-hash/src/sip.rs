@@ -1,6 +1,8 @@
 //! Portable SipHash-2-4 and SipHash-1-3 (port of `sip_hash.h`), plus the
-//! j-lanes tree hash extension (port of `scalar_sip_tree_hash.cc`, with an
-//! AVX2 version of `sip_tree_hash.cc` selected at runtime on x86_64).
+//! j-lanes tree hash extension (port of `scalar_sip_tree_hash.cc`). The tree
+//! hash also has SIMD versions: AVX2 (port of `sip_tree_hash.cc`) and, behind
+//! the `avx512` feature, AVX-512VL on x86_64, selected at runtime, and NEON on
+//! aarch64. The last two have no upstream counterpart.
 //!
 //! Outputs are identical to the reference SipHash for messages of any length,
 //! and every tree hash implementation produces the same value.
@@ -108,7 +110,7 @@ pub fn sip_hash13(key: SipHashKey, bytes: &[u8]) -> u64 {
 }
 
 /// Number of independent SipHash chains interleaved by the tree hash.
-const TREE_LANES: usize = 4;
+pub(crate) const TREE_LANES: usize = 4;
 
 /// The four 8-byte words of a 32-byte packet, little-endian.
 fn packet_words(packet: &[u8; 32]) -> [u64; TREE_LANES] {
@@ -133,21 +135,7 @@ fn tree_compute_scalar<const U: usize, const F: usize>(key: Key, bytes: &[u8]) -
         }
     }
 
-    // Final 32-byte packet: the remainder, zero-padded, with the number of
-    // remaining bytes in the top byte of the last word and the last
-    // `remainder % 4` bytes packed little-endian below it (the HighwayHash
-    // padding scheme, so vector and scalar tree hashes agree).
-    let remainder = tail.len();
-    let remainder_mod4 = remainder & 3;
-    let whole_words = remainder - remainder_mod4;
-    let mut packet4 = (remainder as u32) << 24;
-    for (i, byte) in tail[whole_words..].iter().enumerate() {
-        packet4 += (*byte as u32) << (i * 8);
-    }
-    let mut final_packet = [0u8; 32];
-    final_packet[..whole_words].copy_from_slice(&tail[..whole_words]);
-    final_packet[28..].copy_from_slice(&packet4.to_le_bytes());
-    for (lane, word) in lanes.iter_mut().zip(packet_words(&final_packet)) {
+    for (lane, word) in lanes.iter_mut().zip(packet_words(&final_packet(tail))) {
         lane.update_u64(word);
     }
 
@@ -156,17 +144,59 @@ fn tree_compute_scalar<const U: usize, const F: usize>(key: Key, bytes: &[u8]) -
     reduce::<U, F>(SipHashKey([key.0[0], key.0[1]]), &hashes)
 }
 
+/// The last 32-bit word of the final tree-hash packet: the number of
+/// remaining bytes in the top byte, with the last `tail.len() % 4` bytes
+/// packed little-endian below it (the HighwayHash padding scheme, so vector
+/// and scalar tree hashes agree).
+///
+/// `tail` is the 0..=31 bytes left after the whole 32-byte packets.
+pub(crate) fn final_packet_word(tail: &[u8]) -> u32 {
+    let remainder = tail.len();
+    debug_assert!(remainder < 32);
+    let whole_words = remainder - (remainder & 3);
+    let mut packet4 = (remainder as u32) << 24;
+    for (i, byte) in tail[whole_words..].iter().enumerate() {
+        packet4 += (*byte as u32) << (i * 8);
+    }
+    packet4
+}
+
+/// The final 32-byte packet of the tree hash: the whole 4-byte words of
+/// `tail`, zero padding, then [`final_packet_word`] in bytes 28..32.
+pub(crate) fn final_packet(tail: &[u8]) -> [u8; 32] {
+    let whole_words = tail.len() & !3;
+    let mut packet = [0u8; 32];
+    packet[..whole_words].copy_from_slice(&tail[..whole_words]);
+    packet[28..].copy_from_slice(&final_packet_word(tail).to_le_bytes());
+    packet
+}
+
 /// The tree hash on the best implementation available: AVX2 on x86_64 when
-/// `allow_simd` is set and the CPU has it, the scalar code otherwise.
-/// `allow_simd` only ever *disables* SIMD, so callers need no `unsafe`; it is
-/// what lets the tests reach both implementations on any one machine.
+/// the CPU has it, NEON on aarch64, the scalar code otherwise. `allow_simd` only ever *disables* SIMD, so
+/// callers need no `unsafe`; it is what lets the tests reach both
+/// implementations on any one machine.
 fn tree_compute<const U: usize, const F: usize>(allow_simd: bool, key: Key, bytes: &[u8]) -> u64 {
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
     if allow_simd && crate::arch::x86::has_avx2() {
         // SAFETY: AVX2 support was just detected.
         return unsafe { crate::arch::x86::avx2_sip_tree::tree_hash::<U, F>(key, bytes) };
     }
-    #[cfg(not(all(target_arch = "x86_64", not(feature = "portable-only"))))]
+    #[cfg(all(
+        target_arch = "aarch64",
+        target_endian = "little",
+        not(feature = "portable-only")
+    ))]
+    if allow_simd {
+        return crate::neon_sip_tree::tree_hash::<U, F>(key, bytes);
+    }
+    #[cfg(not(any(
+        all(target_arch = "x86_64", not(feature = "portable-only")),
+        all(
+            target_arch = "aarch64",
+            target_endian = "little",
+            not(feature = "portable-only")
+        ),
+    )))]
     let _ = allow_simd; // No SIMD tree hash in this build.
     tree_compute_scalar::<U, F>(key, bytes)
 }
@@ -188,7 +218,8 @@ pub(crate) fn reduce<const U: usize, const F: usize>(key: SipHashKey, hashes: &[
 /// infeasible to compute as long as the key remains secret.
 ///
 /// Uses AVX2 on x86_64 CPUs that have it (one 256-bit register holds the four
-/// chains) and the portable code elsewhere; the result is the same.
+/// chains), NEON on little-endian aarch64 (two 128-bit registers) and the
+/// portable code elsewhere; the result is the same.
 pub fn sip_tree_hash(key: Key, bytes: &[u8]) -> u64 {
     tree_compute::<2, 4>(true, key, bytes)
 }

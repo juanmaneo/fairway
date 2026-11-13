@@ -10,7 +10,7 @@
 
 use core::arch::x86_64::*;
 
-use crate::sip::reduce;
+use crate::sip::{final_packet_word, reduce};
 use crate::{Key, SipHashKey};
 
 #[inline(always)]
@@ -166,10 +166,7 @@ unsafe fn load_final_packet(tail: &[u8]) -> __m256i {
     // 0x00FF_FFFF_FFFF_FFFF), widened to a 32-bit mask below.
     let packed_mask = 0x00FF_FFFF_FFFF_FFFFu64 >> ((7 - whole_words) * 8);
 
-    let mut packet4 = (remainder as u32) << 24;
-    for (i, byte) in tail[whole_words * 4..].iter().enumerate() {
-        packet4 += (*byte as u32) << (i * 8);
-    }
+    let packet4 = final_packet_word(tail);
 
     // SAFETY: the caller guarantees AVX2 support. Only the first
     // `whole_words` 32-bit words of `tail` are read, all within its bounds.
@@ -207,7 +204,39 @@ pub(crate) unsafe fn tree_hash<const U: usize, const F: usize>(key: Key, bytes: 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::sip::{scalar_sip_tree_hash, scalar_sip_tree_hash13};
     use crate::vectors::{SIP_TREE_HASH13_OUTPUT, SIP_TREE_HASH_OUTPUT, SIP_TREE_KEY};
+
+    /// Every length 0..=160 (the final packet's 32 tail lengths, with up to
+    /// five whole packets before it) against the portable code. The public
+    /// entry points would bypass AVX2 on a CPU with AVX-512, so this test
+    /// reaches it directly.
+    #[test]
+    fn avx2_tree_hash_matches_scalar() {
+        // As in `avx2_tree_hash_golden`.
+        #[cfg(not(coverage))]
+        if !super::super::has_avx2() {
+            return;
+        }
+        let input: Vec<u8> = (0..160u32).map(|i| (i * 7 + 3) as u8).collect();
+        let key = Key(SIP_TREE_KEY);
+        for len in 0..=input.len() {
+            let bytes = &input[..len];
+            // SAFETY: the test returned early unless the CPU has AVX2.
+            unsafe {
+                assert_eq!(
+                    tree_hash::<2, 4>(key, bytes),
+                    scalar_sip_tree_hash(key, bytes),
+                    "avx2 tree24 at {len}"
+                );
+                assert_eq!(
+                    tree_hash::<1, 3>(key, bytes),
+                    scalar_sip_tree_hash13(key, bytes),
+                    "avx2 tree13 at {len}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn avx2_tree_hash_golden() {
