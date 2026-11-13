@@ -1,2 +1,7 @@
 [alias]
 xtask = "run --quiet --package xtask --"
+
+[build]
+# The default for the root workspace, spelled out because `fuzz/` is a
+# separate workspace that would otherwise build into `fuzz/target`.
+target-dir = "target"

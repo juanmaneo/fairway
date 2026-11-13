@@ -1,0 +1,54 @@
+[package]
+name = "fairway-hash-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "libFuzzer targets for fairway-hash (run with `cargo +nightly fuzz`)"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+# `arbitrary-derive` lets the targets describe their inputs as plain structs.
+libfuzzer-sys = { version = "0.4", features = ["arbitrary-derive"] }
+fairway-hash = { path = "../crates/fairway-hash" }
+
+[features]
+# The AVX-512VL backends (runtime-detected; needs Rust 1.89+, which any
+# nightly that can fuzz is).
+avx512 = ["fairway-hash/avx512"]
+
+# Its own workspace, so the root workspace (and its lockfile) never sees
+# libfuzzer-sys and `cargo xtask dev-check` stays offline.
+[workspace]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "highwayhash"
+path = "fuzz_targets/highwayhash.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sip_hash"
+path = "fuzz_targets/sip_hash.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sip_tree_hash"
+path = "fuzz_targets/sip_tree_hash.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "batch"
+path = "fuzz_targets/batch.rs"
+test = false
+doc = false
+bench = false
