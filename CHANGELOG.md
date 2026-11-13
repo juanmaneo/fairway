@@ -16,6 +16,18 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   450 MiB/s, a 1 KiB hash from about 0.9 GiB/s to about 4.2 GiB/s, and large
   inputs are unchanged (about 5 GiB/s). With LTO enabled nothing changes. The
   0.1.1 "Known limitations" note no longer applies. Hash output is unchanged.
+- `fairway*_many` interleave six inputs instead of four. Measured on Zen 3
+  (AVX2) against four and eight lanes, six was about 5-8% faster on inputs
+  of 1 KiB and up, and eight was slower than four.
+
+### Added
+
+- `HighwayHasher::hash64`, `hash128` and `hash256`: hash an input starting
+  from the hasher's current state without modifying it. On a fresh hasher
+  this equals the one-shot functions with the key schedule and CPU detection
+  done once, which is about 1.5x faster for inputs under 1 KiB when many
+  inputs share one key (22 million 32-byte hashes per second on one Zen 3
+  core, against 15 million for `fairway64`).
 
 ## [0.1.1] - 2026-11-13
 

@@ -132,6 +132,57 @@ fn new_and_one_shot_agree_on_long_inputs() {
     }
 }
 
+#[test]
+fn keyed_hash_matches_one_shot_and_leaves_hasher_untouched() {
+    let key = Key(KEY64);
+    let mut rng = common::Rng(11);
+    for backend in backends() {
+        let fresh = HighwayHasher::with_backend(key, backend);
+        for len in [0, 1, 31, 32, 33, 64, 95, 96, 97, 1000, 1024, 4099] {
+            let bytes = rng.bytes(len);
+            let mut expected = HighwayHasher::with_backend(key, backend);
+            expected.update(&bytes);
+            assert_eq!(fresh.hash64(&bytes), expected.finalize64(), "64 at {len}");
+            assert_eq!(
+                fresh.hash128(&bytes),
+                expected.finalize128(),
+                "128 at {len}"
+            );
+            assert_eq!(
+                fresh.hash256(&bytes),
+                expected.finalize256(),
+                "256 at {len}"
+            );
+        }
+        // A fresh hasher stays fresh after `hash*`.
+        assert_eq!(fresh.finalize64(), fairway64(key, b""));
+
+        // With a partial packet buffered, `hash*` continues from it without
+        // changing the hasher.
+        let mut prefix = HighwayHasher::with_backend(key, backend);
+        prefix.update(b"prefix");
+        let before = prefix.finalize256();
+        for len in [0, 1, 25, 26, 27, 58, 59, 1000] {
+            let bytes = rng.bytes(len);
+            let mut expected = HighwayHasher::with_backend(key, backend);
+            expected.update(b"prefix");
+            expected.update(&bytes);
+            assert_eq!(prefix.hash64(&bytes), expected.finalize64(), "64 at {len}");
+            assert_eq!(
+                prefix.hash128(&bytes),
+                expected.finalize128(),
+                "128 at {len}"
+            );
+            assert_eq!(
+                prefix.hash256(&bytes),
+                expected.finalize256(),
+                "256 at {len}"
+            );
+        }
+        assert_eq!(prefix.finalize256(), before);
+    }
+}
+
 /// `flat[i] = rand() & 0xFF` after `srand(129)`, as glibc generates them —
 /// the exact bytes `VerifyCat` hashes upstream.
 const CAT_FLAT: [u8; 105] = [

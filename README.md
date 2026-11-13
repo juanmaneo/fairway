@@ -46,6 +46,12 @@ let h256: [u64; 4] = h.finalize256();
 use fairway_hash::{fairway64, fairway128, fairway256};
 assert_eq!(fairway64(key, b"abc"), fairway64(key, b"abc"));
 
+// Many small inputs with one key: build the hasher once (key schedule and
+// CPU detection done once), then hash each input from it (about 1.5x faster
+// than `fairway64` under 1 KiB):
+let keyed = HighwayHasher::new(key);
+assert_eq!(keyed.hash64(b"packet"), fairway64(key, b"packet"));
+
 // Many independent inputs at once (about 1.4x faster than a loop on large
 // inputs, 2x on tiny ones; `_par` also uses several threads for big batches):
 use fairway_hash::{fairway64_many, fairway64_many_par};

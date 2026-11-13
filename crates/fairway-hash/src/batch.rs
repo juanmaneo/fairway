@@ -15,9 +15,10 @@ use crate::portable;
 #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
 use crate::{arch, x86_entry};
 
-/// Number of inputs advanced together. Four independent chains hide most of
-/// the multiply latency without running out of vector registers.
-const LANES: usize = 4;
+/// Number of inputs advanced together. Six independent chains hide the
+/// multiply latency; measured against four and eight on Zen 3 (AVX2), six
+/// was fastest and eight was slower than four (register spills).
+const LANES: usize = 6;
 
 /// Fewer common packets than this and interleaving costs more than it saves
 /// (setting up and splitting a group has a fixed price), so the inputs are
