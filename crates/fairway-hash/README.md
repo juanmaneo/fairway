@@ -24,7 +24,7 @@ NEON and portable) reproduces them.
 | AVX-512VL | x86_64 | runtime-detected; off-by-default `avx512` feature (needs Rust 1.89+ when enabled) |
 | AVX2 | x86_64 | runtime-detected |
 | SSE4.1 | x86_64 | runtime-detected |
-| NEON | aarch64 | always available |
+| NEON | little-endian aarch64 | always available |
 | Portable (scalar) | everything else, incl. big-endian | fallback / `scalar` module |
 
 The table is for HighwayHash. `sip_tree_hash` has an AVX2 version (runtime-detected,

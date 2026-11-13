@@ -304,6 +304,33 @@ fn unavailable_backend_falls_back_to_portable() {
     assert!(available.contains(&fairway_hash::best_backend()));
 }
 
+/// The NEON backend assumes little-endian lane loads, so it must be used on
+/// little-endian aarch64 only. On big-endian aarch64 it produced wrong hashes
+/// before this gate existed; there `Backend::Neon` must fall back to portable
+/// and `best_backend` must not pick it.
+#[test]
+fn neon_is_used_only_on_little_endian_aarch64() {
+    let h = HighwayHasher::with_backend(Key(KEY64), Backend::Neon);
+    #[cfg(all(
+        target_arch = "aarch64",
+        target_endian = "little",
+        not(feature = "portable-only")
+    ))]
+    {
+        assert_eq!(h.backend(), Backend::Neon);
+        assert_eq!(fairway_hash::best_backend(), Backend::Neon);
+    }
+    #[cfg(not(all(
+        target_arch = "aarch64",
+        target_endian = "little",
+        not(feature = "portable-only")
+    )))]
+    {
+        assert_eq!(h.backend(), Backend::Portable);
+        assert_ne!(fairway_hash::best_backend(), Backend::Neon);
+    }
+}
+
 #[test]
 fn backend_names() {
     let names: Vec<&str> = common::ALL_BACKENDS.iter().map(|b| b.name()).collect();

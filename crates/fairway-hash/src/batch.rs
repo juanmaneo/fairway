@@ -9,7 +9,11 @@
 
 use crate::{best_backend, Backend, Inner, Key};
 
-#[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+#[cfg(all(
+    target_arch = "aarch64",
+    target_endian = "little",
+    not(feature = "portable-only")
+))]
 use crate::neon;
 use crate::portable;
 #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -43,7 +47,11 @@ enum Group {
     Avx2([arch::x86::avx2::State; LANES]),
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
     Sse41([arch::x86::sse41::State; LANES]),
-    #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+    #[cfg(all(
+        target_arch = "aarch64",
+        target_endian = "little",
+        not(feature = "portable-only")
+    ))]
     Neon([neon::State; LANES]),
 }
 
@@ -63,7 +71,11 @@ impl Group {
             Inner::Avx2(s) => Group::Avx2([*s; LANES]),
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Inner::Sse41(s) => Group::Sse41([*s; LANES]),
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Inner::Neon(s) => Group::Neon([*s; LANES]),
         }
     }
@@ -93,7 +105,11 @@ impl Group {
                 // SAFETY: a `Group::Sse41` exists only when SSE4.1 was detected.
                 unsafe { x86_entry::sse41::update_lockstep(states, streams) }
             }
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Group::Neon(states) => lockstep(states, streams, |s, p| s.update_packet(p)),
         }
     }
@@ -112,7 +128,11 @@ impl Group {
             Group::Avx2(states) => Inner::Avx2(states[lane]),
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Group::Sse41(states) => Inner::Sse41(states[lane]),
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Group::Neon(states) => Inner::Neon(states[lane]),
         }
     }

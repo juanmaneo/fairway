@@ -10,8 +10,9 @@
 //! * AVX-512VL on x86_64 behind the off-by-default `avx512` cargo feature
 //!   (requires Rust 1.89+ when enabled; the MSRV stays 1.88 without it),
 //! * AVX2 and SSE4.1 on x86_64 (via `core::arch`, detected with `std::arch`),
-//! * NEON on aarch64,
-//! * a portable scalar fallback everywhere else (also covers big-endian).
+//! * NEON on little-endian aarch64,
+//! * a portable scalar fallback everywhere else (including big-endian
+//!   targets, aarch64 among them: the NEON code loads native-endian words).
 //!
 //! # Examples
 //!
@@ -81,12 +82,19 @@
 // CPU feature detection (or explicit `target_feature` callers).
 
 #[cfg(all(
-    any(target_arch = "x86_64", target_arch = "aarch64"),
+    any(
+        target_arch = "x86_64",
+        all(target_arch = "aarch64", target_endian = "little")
+    ),
     not(feature = "portable-only")
 ))]
 mod arch;
 mod batch;
-#[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+#[cfg(all(
+    target_arch = "aarch64",
+    target_endian = "little",
+    not(feature = "portable-only")
+))]
 mod neon;
 #[cfg(all(
     target_arch = "aarch64",
@@ -184,13 +192,21 @@ pub fn best_backend() -> Backend {
         let avx512 = false;
         best_backend_for(avx512, arch::x86::has_avx2(), arch::x86::has_sse41())
     }
-    #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+    #[cfg(all(
+        target_arch = "aarch64",
+        target_endian = "little",
+        not(feature = "portable-only")
+    ))]
     {
         Backend::Neon
     }
     #[cfg(not(any(
         all(target_arch = "x86_64", not(feature = "portable-only")),
-        all(target_arch = "aarch64", not(feature = "portable-only")),
+        all(
+            target_arch = "aarch64",
+            target_endian = "little",
+            not(feature = "portable-only")
+        ),
     )))]
     {
         Backend::Portable
@@ -210,7 +226,11 @@ enum Inner {
     Avx2(arch::x86::avx2::State),
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
     Sse41(arch::x86::sse41::State),
-    #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+    #[cfg(all(
+        target_arch = "aarch64",
+        target_endian = "little",
+        not(feature = "portable-only")
+    ))]
     Neon(neon::State),
 }
 
@@ -236,7 +256,11 @@ impl Inner {
                 // SAFETY: SSE4.1 support was just detected.
                 Inner::Sse41(unsafe { x86_entry::sse41::new(key) })
             }
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Backend::Neon => Inner::Neon(neon::State::new(key)),
             // Portable, or a backend this CPU/build cannot run.
             _ => Inner::Portable(portable::State::new(key)),
@@ -271,7 +295,11 @@ impl Inner {
                 // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
                 unsafe { x86_entry::sse41::update_packets(s, packets) }
             }
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Inner::Neon(s) => {
                 for packet in packets {
                     s.update_packet(packet);
@@ -310,7 +338,11 @@ impl Inner {
                 // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
                 unsafe { x86_entry::sse41::finalize64(s, remainder) }
             }
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Inner::Neon(s) => {
                 let mut s = *s;
                 if !remainder.is_empty() {
@@ -351,7 +383,11 @@ impl Inner {
                 // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
                 unsafe { x86_entry::sse41::finalize128(s, remainder) }
             }
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Inner::Neon(s) => {
                 let mut s = *s;
                 if !remainder.is_empty() {
@@ -392,7 +428,11 @@ impl Inner {
                 // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
                 unsafe { x86_entry::sse41::finalize256(s, remainder) }
             }
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Inner::Neon(s) => {
                 let mut s = *s;
                 if !remainder.is_empty() {
@@ -444,7 +484,11 @@ impl HighwayHasher {
             Inner::Avx2(_) => Backend::Avx2,
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Inner::Sse41(_) => Backend::Sse41,
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
+            #[cfg(all(
+                target_arch = "aarch64",
+                target_endian = "little",
+                not(feature = "portable-only")
+            ))]
             Inner::Neon(_) => Backend::Neon,
         }
     }

@@ -84,6 +84,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   18% faster on 1 KiB batches (43 vs 36 ms). It therefore stays opt-in; AVX2
   remains the default choice on this hardware.
 
+### Fixed
+
+- The NEON HighwayHash backend is now used only on little-endian aarch64.
+  It was selected on every `target_arch = "aarch64"` target, including
+  big-endian ones (`aarch64_be`), where its lane loads read the input in the
+  wrong byte order and `fairway64` and friends returned wrong hashes (for
+  100 bytes `0..99` under key `[1, 2, 3, 4]`: `3e3fd06ecc830535` instead of
+  `56b739f979c440f9`). Found by running a freestanding probe under
+  `qemu-aarch64_be`. Big-endian aarch64 now falls back to the portable
+  backend, which gives the correct value; `Backend::Neon` still exists on
+  every target and falls back to portable where unsupported. Little-endian
+  aarch64 is unchanged.
+
 ## [0.1.1] - 2026-11-13
 
 Performance release. Hash output is unchanged and the public API only grows.
