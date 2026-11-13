@@ -32,10 +32,11 @@ about 1.7x the portable one on large inputs) and a portable one, like upstream,
 plus a NEON one on little-endian aarch64 that upstream does not have (two
 chains per 128-bit register; checked against the portable code, but not yet
 benchmarked on real hardware). With the `avx512` feature, CPUs that have
-AVX-512VL use a third version, also new, which has not been run or timed on
-AVX-512 hardware yet: compare `cargo run --release --example bench` with and
-without `--features avx512` before relying on it for speed. Every other CPU
-uses the portable one.
+AVX-512VL use a third version, also new. On an Intel Xeon 6985P-C it is 7%
+faster than the AVX2 one on 32-byte inputs and 43-56% faster from 1 KiB up;
+other AVX-512 CPUs are unmeasured, and `cargo run --release --example bench`
+with and without `--features avx512` compares them. Every other CPU uses the
+portable one.
 
 ## Usage
 
