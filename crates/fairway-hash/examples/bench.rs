@@ -115,10 +115,7 @@ fn main() {
             fairway64_many_par(KEY, black_box(&inputs), &mut out);
             black_box(&mut out);
         });
-        println!(
-            "{:>8} {:>9} {:>12.0} {:>12.0} {:>12.0}",
-            count, size, looped, many, par
-        );
+        println!("{count:>8} {size:>9} {looped:>12.0} {many:>12.0} {par:>12.0}");
     }
 
     println!();
@@ -142,9 +139,6 @@ fn main() {
         let tree_scalar = run(&|b| scalar::sip_tree_hash(KEY, b));
         let tree_best = run(&|b| sip_tree_hash(KEY, b));
         let highway = run(&|b| fairway64(KEY, b));
-        println!(
-            "{:>10} {:>10.0} {:>12.0} {:>12.0} {:>12.0}",
-            size, sip, tree_scalar, tree_best, highway
-        );
+        println!("{size:>10} {sip:>10.0} {tree_scalar:>12.0} {tree_best:>12.0} {highway:>12.0}");
     }
 }
