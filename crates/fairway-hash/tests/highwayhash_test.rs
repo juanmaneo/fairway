@@ -108,6 +108,30 @@ fn one_shot_functions_match_golden() {
     }
 }
 
+/// `HighwayHasher::new` picks the best backend, and the one-shot helpers
+/// (which feed whole packets straight from the input) agree with the
+/// incremental hasher on inputs of many packets, with and without a tail.
+#[test]
+fn new_and_one_shot_agree_on_long_inputs() {
+    let key = Key(KEY64);
+    let input = golden_input();
+    let mut h = HighwayHasher::new(key);
+    assert_eq!(h.backend(), fairway_hash::best_backend());
+    h.update(&input[..64]);
+    assert_eq!(h.finalize64(), EXPECTED64[64]);
+
+    let mut rng = common::Rng(7);
+    for len in [0, 1, 31, 32, 33, 64, 95, 96, 97, 1000, 1024, 4099] {
+        let bytes = rng.bytes(len);
+        let mut h = HighwayHasher::new(key);
+        h.update(&bytes);
+        assert_eq!(fairway64(key, &bytes), h.finalize64(), "64 at {len}");
+        assert_eq!(fairway128(key, &bytes), h.finalize128(), "128 at {len}");
+        assert_eq!(fairway256(key, &bytes), h.finalize256(), "256 at {len}");
+        assert_eq!(fairway64(key, &bytes), scalar::hash64(key, &bytes), "{len}");
+    }
+}
+
 /// `flat[i] = rand() & 0xFF` after `srand(129)`, as glibc generates them —
 /// the exact bytes `VerifyCat` hashes upstream.
 const CAT_FLAT: [u8; 105] = [

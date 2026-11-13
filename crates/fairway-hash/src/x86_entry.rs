@@ -27,14 +27,34 @@ macro_rules! entry_points {
                 unsafe { State::new(key) }
             }
 
+            /// Advances `states[i]` over `streams[i]`, one packet of each
+            /// stream at a time, so the independent hash chains overlap.
+            /// Only the first `min(len)` packets of each stream are used.
+            ///
+            /// This is the only place `State::update_packet` is called, on
+            /// purpose: the backend's `update_packet` is too big for the
+            /// compiler to inline at several call sites, and left out of
+            /// line every intrinsic in it becomes a function call.
+            ///
+            /// # Safety
+            /// CPU must support the feature this module is named after.
+            #[target_feature(enable = $feature)]
+            pub(crate) unsafe fn update_lockstep(states: &mut [State], streams: &[&[[u8; 32]]]) {
+                let packets = streams.iter().map(|s| s.len()).min().unwrap_or(0);
+                for p in 0..packets {
+                    for (state, stream) in states.iter_mut().zip(streams) {
+                        // SAFETY: the caller guarantees the CPU feature.
+                        unsafe { state.update_packet(&stream[p]) };
+                    }
+                }
+            }
+
             /// # Safety
             /// CPU must support the feature this module is named after.
             #[target_feature(enable = $feature)]
             pub(crate) unsafe fn update_packets(state: &mut State, packets: &[[u8; 32]]) {
-                for packet in packets {
-                    // SAFETY: the caller guarantees the CPU feature.
-                    unsafe { state.update_packet(packet) };
-                }
+                // SAFETY: the caller guarantees the CPU feature.
+                unsafe { update_lockstep(core::slice::from_mut(state), &[packets]) };
             }
 
             /// Finalizes a copy of `state` after absorbing `remainder`

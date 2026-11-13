@@ -27,3 +27,8 @@ unexpected_cfgs = { level = "warn", check-cfg = ["cfg(coverage)"] }
 
 [lints.clippy]
 undocumented_unsafe_blocks = "deny"
+
+# The benchmark compares against the multi-threaded batch functions.
+[[example]]
+name = "bench"
+required-features = ["std"]

@@ -31,6 +31,19 @@
 //! use fairway_hash::{fairway64, Key};
 //! assert_eq!(fairway64(Key([1, 2, 3, 4]), b"abc"), fairway64(Key([1, 2, 3, 4]), b"abc"));
 //! ```
+//!
+//! Many independent inputs are faster hashed together than one by one (see
+//! [`fairway64_many`], and [`fairway64_many_par`] with the `std` feature to
+//! add threads):
+//!
+//! ```
+//! use fairway_hash::{fairway64, fairway64_many, Key};
+//! let key = Key([1, 2, 3, 4]);
+//! let inputs = [&b"one"[..], b"two", b"three"];
+//! let mut out = [0u64; 3];
+//! fairway64_many(key, &inputs, &mut out);
+//! assert_eq!(out[2], fairway64(key, b"three"));
+//! ```
 
 // Unit tests use `std` (the test harness needs it anyway), even without the
 // `std` feature.
@@ -44,6 +57,7 @@
     not(feature = "portable-only")
 ))]
 mod arch;
+mod batch;
 #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
 mod neon;
 mod portable;
@@ -57,6 +71,9 @@ pub mod vectors;
 #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
 pub use arch::x86::{avx2, sse41};
 
+pub use batch::{fairway128_many, fairway256_many, fairway64_many};
+#[cfg(feature = "std")]
+pub use batch::{fairway128_many_par, fairway256_many_par, fairway64_many_par};
 pub use sip::{sip_hash, sip_hash13, SipHashKey};
 
 /// 256-bit secret key. Keep it unknown to attackers; initialize it randomly.
@@ -123,6 +140,7 @@ pub fn best_backend() -> Backend {
     }
 }
 
+#[derive(Clone)]
 enum Inner {
     Portable(portable::State),
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -340,25 +358,28 @@ impl HighwayHasher {
     }
 }
 
+/// Hashes `bytes` in one go: whole packets straight from the input, the tail
+/// straight into finalization, without the incremental hasher's buffer.
+fn one_shot<T>(key: Key, bytes: &[u8], finish: fn(&Inner, &[u8]) -> T) -> T {
+    let (packets, remainder) = bytes.as_chunks::<32>();
+    let mut inner = Inner::new(key, best_backend());
+    inner.update_packets(packets);
+    finish(&inner, remainder)
+}
+
 /// One-shot 64-bit HighwayHash using the best backend for the current CPU.
 pub fn fairway64(key: Key, bytes: &[u8]) -> u64 {
-    let mut h = HighwayHasher::new(key);
-    h.update(bytes);
-    h.finalize64()
+    one_shot(key, bytes, Inner::finalize64)
 }
 
 /// One-shot 128-bit HighwayHash using the best backend for the current CPU.
 pub fn fairway128(key: Key, bytes: &[u8]) -> [u64; 2] {
-    let mut h = HighwayHasher::new(key);
-    h.update(bytes);
-    h.finalize128()
+    one_shot(key, bytes, Inner::finalize128)
 }
 
 /// One-shot 256-bit HighwayHash using the best backend for the current CPU.
 pub fn fairway256(key: Key, bytes: &[u8]) -> [u64; 4] {
-    let mut h = HighwayHasher::new(key);
-    h.update(bytes);
-    h.finalize256()
+    one_shot(key, bytes, Inner::finalize256)
 }
 
 /// Portable scalar implementation, always available regardless of CPU.
