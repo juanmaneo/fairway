@@ -93,11 +93,10 @@ On a Zen 3 laptop with the AVX2 backend, one-shot hashing runs at about
 holds a few MiB per thread. Run `cargo run --release --example bench`
 to measure your own machine.
 
-For *small* inputs the AVX2 backend is only fast when the compiler can inline
-its finalization code, which needs link-time optimization (`lto = true` in your
-release profile) or `RUSTFLAGS="-C target-cpu=native"` (or `-C
-target-feature=+avx2`). Without either, a 32-byte hash takes about as long as
-it did in 0.1.0 (about 30 MiB/s). Large inputs are fast either way.
+No special build flags are needed: the SIMD backends enable their CPU feature
+on every function, so they are inlined with the default release profile.
+Link-time optimization (`lto = true`) or `-C target-cpu=native` still help a
+little on very small inputs.
 
 ## Development
 

@@ -6,6 +6,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Small inputs on the AVX2 backend are fast without link-time optimization.
+  The backend's `new`, `update_remainder` and `finalize*` functions now carry
+  `#[target_feature(enable = "avx2")]` themselves, so the compiler inlines them
+  into the entry points with the default release profile. Measured on a Zen 3
+  laptop with `lto = false`: a 32-byte hash went from about 32 MiB/s to about
+  450 MiB/s, a 1 KiB hash from about 0.9 GiB/s to about 4.2 GiB/s, and large
+  inputs are unchanged (about 5 GiB/s). With LTO enabled nothing changes. The
+  0.1.1 "Known limitations" note no longer applies. Hash output is unchanged.
+
 ## [0.1.1] - 2026-11-13
 
 Performance release. Hash output is unchanged and the public API only grows.

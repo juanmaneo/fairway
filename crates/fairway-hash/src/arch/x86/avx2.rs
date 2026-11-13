@@ -228,6 +228,7 @@ pub struct State {
 impl State {
     /// # Safety
     /// CPU must support AVX2.
+    #[target_feature(enable = "avx2")]
     pub unsafe fn new(key: Key) -> Self {
         // SAFETY: the caller guarantees AVX2 support; the unaligned loads read
         // only the 32 bytes of the key/array constants.
@@ -247,6 +248,7 @@ impl State {
     /// # Safety
     /// CPU must support AVX2.
     #[inline]
+    #[target_feature(enable = "avx2")]
     pub unsafe fn update_packet(&mut self, packet: &[u8; 32]) {
         // SAFETY: the caller guarantees AVX2 support; the unaligned load reads
         // exactly the 32 bytes of `packet`.
@@ -278,6 +280,7 @@ impl State {
 
     /// # Safety
     /// CPU must support AVX2. `bytes.len()` must be in 1..=31.
+    #[target_feature(enable = "avx2")]
     pub unsafe fn update_remainder(&mut self, bytes: &[u8]) {
         let size_mod32 = bytes.len();
         debug_assert!((1..32).contains(&size_mod32));
@@ -313,6 +316,7 @@ impl State {
 
     /// # Safety
     /// CPU must support AVX2.
+    #[target_feature(enable = "avx2")]
     pub unsafe fn finalize64(&mut self) -> u64 {
         // SAFETY: the caller guarantees AVX2 support.
         unsafe {
@@ -329,6 +333,7 @@ impl State {
 
     /// # Safety
     /// CPU must support AVX2.
+    #[target_feature(enable = "avx2")]
     pub unsafe fn finalize128(&mut self) -> [u64; 2] {
         // SAFETY: the caller guarantees AVX2 support.
         unsafe {
@@ -347,6 +352,7 @@ impl State {
 
     /// # Safety
     /// CPU must support AVX2.
+    #[target_feature(enable = "avx2")]
     pub unsafe fn finalize256(&mut self) -> [u64; 4] {
         // SAFETY: the caller guarantees AVX2 support.
         unsafe {
