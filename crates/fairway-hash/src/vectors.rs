@@ -102,3 +102,61 @@ pub const SIP_HASH_OUTPUT: [u64; 64] = [
     0xb78dbfaf3a8d83bd, 0xea1ad565322a1a0b, 0x60e61c23a3795013, 0x6606d7e446282b93,
     0x6ca4ecb15c5f91e1, 0x9f626da15c9625f3, 0xe51b38608ef25f57, 0x958a324ceb064572,
 ];
+
+
+/// Key of the SipTreeHash golden values below (the HighwayHash test key).
+pub const SIP_TREE_KEY: [u64; 4] = [
+    0x0706050403020100,
+    0x0f0e0d0c0b0a0908,
+    0x1716151413121110,
+    0x1f1e1d1c1b1a1918,
+];
+
+/// Upstream has no golden values for the tree hash, so these were generated
+/// with the reference `ScalarSipTreeHash` (2-4 rounds) for inputs
+/// `0, 1, 2, ...` and the sizes listed.
+pub const SIP_TREE_HASH_OUTPUT: [(usize, u64); 19] = [
+    (0, 0xd3ea3c795cbe0749),
+    (1, 0x9617aaa224c9eeaa),
+    (2, 0x8f0ff811b64b54be),
+    (3, 0xf33ca112de53570b),
+    (4, 0xb916101624f803a4),
+    (5, 0x7f6a0c7e37beb548),
+    (31, 0x84d4627e0471b296),
+    (32, 0xe3b79f11a5b22e5d),
+    (33, 0x93c626197ead9614),
+    (63, 0x35b43a904ebdef98),
+    (64, 0xa40858812f6da155),
+    (65, 0x86d5c477146a8a8f),
+    (95, 0xdc0ad5aa8a6ce03e),
+    (96, 0xdbaa735ef6a62fcd),
+    (97, 0x2898f07c4a6cb522),
+    (100, 0x19383e9b5294262b),
+    (1000, 0x3aed8f533f745fd0),
+    (4099, 0x2f15ca0b1c9eadb1),
+    (65536, 0x8cd3df8c143f2fb7),
+];
+
+/// Same as [`SIP_TREE_HASH_OUTPUT`], for the round-reduced 1-3 variant
+/// (reference `ScalarSipTreeHash13`).
+pub const SIP_TREE_HASH13_OUTPUT: [(usize, u64); 19] = [
+    (0, 0xd662a159c31ba9f9),
+    (1, 0x3cc96ac7a6f804de),
+    (2, 0xdd8b52052ab890d1),
+    (3, 0xb182e79106ddca24),
+    (4, 0x51151d585c230a1a),
+    (5, 0x5148b7893f5c1423),
+    (31, 0x2e83c6d921066aec),
+    (32, 0xa67a21e3c1886049),
+    (33, 0x7e33bd2b8badaf6d),
+    (63, 0x3c759bc70d6f8100),
+    (64, 0x385ab5de94b188f3),
+    (65, 0x10a68b5cee069bc3),
+    (95, 0xc6df409fee0e00e7),
+    (96, 0x0abcb4ff15953e1d),
+    (97, 0xfb61f71b3d97e52f),
+    (100, 0xb37b639d57a99d88),
+    (1000, 0x54f010e2f8d80895),
+    (4099, 0x776c5ba412b8c0b5),
+    (65536, 0xe1c4fb5ffd6fe50c),
+];

@@ -1,6 +1,9 @@
-//! Portable SipHash-2-4 and SipHash-1-3 (port of `sip_hash.h`).
+//! Portable SipHash-2-4 and SipHash-1-3 (port of `sip_hash.h`), plus the
+//! j-lanes tree hash extension (port of `scalar_sip_tree_hash.cc`).
 //!
 //! Outputs are identical to the reference SipHash for messages of any length.
+
+use crate::Key;
 
 /// 128-bit SipHash key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -29,9 +32,24 @@ impl<const U: usize, const F: usize> SipHashState<U, F> {
         }
     }
 
+    /// The per-lane state of the tree hash: one key word, tagged with the
+    /// number of lanes and the lane index.
+    fn new_tree_lane(lane_key: u64) -> Self {
+        SipHashState {
+            v0: 0x736f6d6570736575 ^ lane_key,
+            v1: 0x646f72616e646f6d ^ lane_key,
+            v2: 0x6c7967656e657261 ^ lane_key,
+            v3: 0x7465646279746573 ^ lane_key,
+        }
+    }
+
     #[inline(always)]
     fn update(&mut self, bytes: &[u8; 8]) {
-        let packet = u64::from_le_bytes(*bytes);
+        self.update_u64(u64::from_le_bytes(*bytes));
+    }
+
+    #[inline(always)]
+    fn update_u64(&mut self, packet: u64) {
         self.v3 ^= packet;
         self.compress::<U>();
         self.v0 ^= packet;
@@ -85,4 +103,91 @@ pub fn sip_hash(key: SipHashKey, bytes: &[u8]) -> u64 {
 /// SipHash-1-3: faster but weaker variant (1 update round, 3 finalization).
 pub fn sip_hash13(key: SipHashKey, bytes: &[u8]) -> u64 {
     compute::<1, 3>(key.0, bytes)
+}
+
+/// Number of independent SipHash chains interleaved by the tree hash.
+const TREE_LANES: usize = 4;
+
+/// The four 8-byte words of a 32-byte packet, little-endian.
+fn packet_words(packet: &[u8; 32]) -> [u64; TREE_LANES] {
+    core::array::from_fn(|lane| {
+        let word: [u8; 8] = core::array::from_fn(|i| packet[lane * 8 + i]);
+        u64::from_le_bytes(word)
+    })
+}
+
+/// The j-lanes tree hash (port of `ScalarSipTreeHashT`): four SipHash
+/// chains, one per 8-byte word of each 32-byte packet, reduced to one
+/// 64-bit hash by a final SipHash over the four results.
+fn tree_compute<const U: usize, const F: usize>(key: Key, bytes: &[u8]) -> u64 {
+    let mut lanes: [SipHashState<U, F>; TREE_LANES] = core::array::from_fn(|lane| {
+        // `TREE_LANES | lane` is the lane tag of the reference.
+        SipHashState::new_tree_lane(key.0[lane] ^ (TREE_LANES | lane) as u64)
+    });
+    let (packets, tail) = bytes.as_chunks::<32>();
+    for packet in packets {
+        for (lane, word) in lanes.iter_mut().zip(packet_words(packet)) {
+            lane.update_u64(word);
+        }
+    }
+
+    // Final 32-byte packet: the remainder, zero-padded, with the number of
+    // remaining bytes in the top byte of the last word and the last
+    // `remainder % 4` bytes packed little-endian below it (the HighwayHash
+    // padding scheme, so vector and scalar tree hashes agree).
+    let remainder = tail.len();
+    let remainder_mod4 = remainder & 3;
+    let whole_words = remainder - remainder_mod4;
+    let mut packet4 = (remainder as u32) << 24;
+    for (i, byte) in tail[whole_words..].iter().enumerate() {
+        packet4 += (*byte as u32) << (i * 8);
+    }
+    let mut final_packet = [0u8; 32];
+    final_packet[..whole_words].copy_from_slice(&tail[..whole_words]);
+    final_packet[28..].copy_from_slice(&packet4.to_le_bytes());
+    for (lane, word) in lanes.iter_mut().zip(packet_words(&final_packet)) {
+        lane.update_u64(word);
+    }
+
+    // Each lane finalizes; the four results are reduced to one hash.
+    let hashes: [u64; TREE_LANES] = lanes.map(|lane| lane.finalize());
+    reduce::<U, F>(SipHashKey([key.0[0], key.0[1]]), &hashes)
+}
+
+/// `ReduceSipTreeHash`: SipHash over the lane hashes, with no length
+/// padding packet.
+fn reduce<const U: usize, const F: usize>(key: SipHashKey, hashes: &[u64]) -> u64 {
+    let mut state = SipHashState::<U, F>::new(key.0);
+    for hash in hashes {
+        state.update_u64(*hash);
+    }
+    state.finalize()
+}
+
+/// SipTreeHash: SipHash-2-4 keyed with 256 bits, hashing 32-byte packets
+/// down four interleaved chains (the j-lanes tree hash of the reference;
+/// port of `sip_tree_hash.h` / `scalar_sip_tree_hash.cc`). Intended for hash
+/// tables holding attacker-controlled data: multi-collisions are
+/// infeasible to compute as long as the key remains secret.
+pub fn sip_tree_hash(key: Key, bytes: &[u8]) -> u64 {
+    tree_compute::<2, 4>(key, bytes)
+}
+
+/// SipTreeHash13: the round-reduced (1 update, 3 finalization) variant of
+/// [`sip_tree_hash`].
+pub fn sip_tree_hash13(key: Key, bytes: &[u8]) -> u64 {
+    tree_compute::<1, 3>(key, bytes)
+}
+
+/// Reduces `hashes` to a single 64-bit hash with SipHash-2-4, as
+/// [`sip_tree_hash`] combines its four lane results. Useful for tree
+/// hashing: hash chunks independently, then reduce their hashes.
+pub fn reduce_sip_tree_hash(key: SipHashKey, hashes: &[u64]) -> u64 {
+    reduce::<2, 4>(key, hashes)
+}
+
+/// See [`reduce_sip_tree_hash`]; the round-reduced variant used by
+/// [`sip_tree_hash13`].
+pub fn reduce_sip_tree_hash13(key: SipHashKey, hashes: &[u64]) -> u64 {
+    reduce::<1, 3>(key, hashes)
 }

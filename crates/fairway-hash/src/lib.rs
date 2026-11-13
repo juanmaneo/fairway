@@ -57,6 +57,19 @@
 //! fairway64_many(key, &inputs, &mut out);
 //! assert_eq!(out[2], fairway64(key, b"three"));
 //! ```
+//!
+//! The SipHash family is included too: [`sip_hash`] and [`sip_hash13`], and
+//! the 256-bit-keyed tree variants [`sip_tree_hash`] and [`sip_tree_hash13`]
+//! (four interleaved SipHash chains over 32-byte packets, reduced to one
+//! hash; [`reduce_sip_tree_hash`] combines hashes of independent chunks):
+//!
+//! ```
+//! use fairway_hash::{reduce_sip_tree_hash, sip_tree_hash, Key, SipHashKey};
+//! let key = Key([1, 2, 3, 4]);
+//! let hash = sip_tree_hash(key, b"some attacker-controlled input");
+//! let combined = reduce_sip_tree_hash(SipHashKey([1, 2]), &[hash, hash ^ 1]);
+//! assert_ne!(hash, combined);
+//! ```
 
 // Unit tests use `std` (the test harness needs it anyway), even without the
 // `std` feature.
@@ -93,7 +106,10 @@ pub use arch::x86::{avx2, sse41};
 pub use batch::{fairway128_many, fairway256_many, fairway64_many};
 #[cfg(feature = "std")]
 pub use batch::{fairway128_many_par, fairway256_many_par, fairway64_many_par};
-pub use sip::{sip_hash, sip_hash13, SipHashKey};
+pub use sip::{
+    reduce_sip_tree_hash, reduce_sip_tree_hash13, sip_hash, sip_hash13, sip_tree_hash,
+    sip_tree_hash13, SipHashKey,
+};
 
 /// 256-bit secret key. Keep it unknown to attackers; initialize it randomly.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
