@@ -1,7 +1,9 @@
 //! Portable SipHash-2-4 and SipHash-1-3 (port of `sip_hash.h`), plus the
-//! j-lanes tree hash extension (port of `scalar_sip_tree_hash.cc`).
+//! j-lanes tree hash extension (port of `scalar_sip_tree_hash.cc`, with an
+//! AVX2 version of `sip_tree_hash.cc` selected at runtime on x86_64).
 //!
-//! Outputs are identical to the reference SipHash for messages of any length.
+//! Outputs are identical to the reference SipHash for messages of any length,
+//! and every tree hash implementation produces the same value.
 
 use crate::Key;
 
@@ -119,7 +121,7 @@ fn packet_words(packet: &[u8; 32]) -> [u64; TREE_LANES] {
 /// The j-lanes tree hash (port of `ScalarSipTreeHashT`): four SipHash
 /// chains, one per 8-byte word of each 32-byte packet, reduced to one
 /// 64-bit hash by a final SipHash over the four results.
-fn tree_compute<const U: usize, const F: usize>(key: Key, bytes: &[u8]) -> u64 {
+fn tree_compute_scalar<const U: usize, const F: usize>(key: Key, bytes: &[u8]) -> u64 {
     let mut lanes: [SipHashState<U, F>; TREE_LANES] = core::array::from_fn(|lane| {
         // `TREE_LANES | lane` is the lane tag of the reference.
         SipHashState::new_tree_lane(key.0[lane] ^ (TREE_LANES | lane) as u64)
@@ -154,9 +156,24 @@ fn tree_compute<const U: usize, const F: usize>(key: Key, bytes: &[u8]) -> u64 {
     reduce::<U, F>(SipHashKey([key.0[0], key.0[1]]), &hashes)
 }
 
+/// The tree hash on the best implementation available: AVX2 on x86_64 when
+/// `allow_simd` is set and the CPU has it, the scalar code otherwise.
+/// `allow_simd` only ever *disables* SIMD, so callers need no `unsafe`; it is
+/// what lets the tests reach both implementations on any one machine.
+fn tree_compute<const U: usize, const F: usize>(allow_simd: bool, key: Key, bytes: &[u8]) -> u64 {
+    #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
+    if allow_simd && crate::arch::x86::has_avx2() {
+        // SAFETY: AVX2 support was just detected.
+        return unsafe { crate::arch::x86::avx2_sip_tree::tree_hash::<U, F>(key, bytes) };
+    }
+    #[cfg(not(all(target_arch = "x86_64", not(feature = "portable-only"))))]
+    let _ = allow_simd; // No SIMD tree hash in this build.
+    tree_compute_scalar::<U, F>(key, bytes)
+}
+
 /// `ReduceSipTreeHash`: SipHash over the lane hashes, with no length
 /// padding packet.
-fn reduce<const U: usize, const F: usize>(key: SipHashKey, hashes: &[u64]) -> u64 {
+pub(crate) fn reduce<const U: usize, const F: usize>(key: SipHashKey, hashes: &[u64]) -> u64 {
     let mut state = SipHashState::<U, F>::new(key.0);
     for hash in hashes {
         state.update_u64(*hash);
@@ -169,14 +186,29 @@ fn reduce<const U: usize, const F: usize>(key: SipHashKey, hashes: &[u64]) -> u6
 /// port of `sip_tree_hash.h` / `scalar_sip_tree_hash.cc`). Intended for hash
 /// tables holding attacker-controlled data: multi-collisions are
 /// infeasible to compute as long as the key remains secret.
+///
+/// Uses AVX2 on x86_64 CPUs that have it (one 256-bit register holds the four
+/// chains) and the portable code elsewhere; the result is the same.
 pub fn sip_tree_hash(key: Key, bytes: &[u8]) -> u64 {
-    tree_compute::<2, 4>(key, bytes)
+    tree_compute::<2, 4>(true, key, bytes)
 }
 
 /// SipTreeHash13: the round-reduced (1 update, 3 finalization) variant of
 /// [`sip_tree_hash`].
 pub fn sip_tree_hash13(key: Key, bytes: &[u8]) -> u64 {
-    tree_compute::<1, 3>(key, bytes)
+    tree_compute::<1, 3>(true, key, bytes)
+}
+
+/// [`sip_tree_hash`] on the portable code, whatever the CPU. Exposed as
+/// `scalar::sip_tree_hash`.
+pub fn scalar_sip_tree_hash(key: Key, bytes: &[u8]) -> u64 {
+    tree_compute::<2, 4>(false, key, bytes)
+}
+
+/// [`sip_tree_hash13`] on the portable code, whatever the CPU. Exposed as
+/// `scalar::sip_tree_hash13`.
+pub fn scalar_sip_tree_hash13(key: Key, bytes: &[u8]) -> u64 {
+    tree_compute::<1, 3>(false, key, bytes)
 }
 
 /// Reduces `hashes` to a single 64-bit hash with SipHash-2-4, as

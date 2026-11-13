@@ -61,7 +61,8 @@
 //! The SipHash family is included too: [`sip_hash`] and [`sip_hash13`], and
 //! the 256-bit-keyed tree variants [`sip_tree_hash`] and [`sip_tree_hash13`]
 //! (four interleaved SipHash chains over 32-byte packets, reduced to one
-//! hash; [`reduce_sip_tree_hash`] combines hashes of independent chunks):
+//! hash, on AVX2 where available and portable code elsewhere;
+//! [`reduce_sip_tree_hash`] combines hashes of independent chunks):
 //!
 //! ```
 //! use fairway_hash::{reduce_sip_tree_hash, sip_tree_hash, Key, SipHashKey};
@@ -541,6 +542,9 @@ pub fn fairway256(key: Key, bytes: &[u8]) -> [u64; 4] {
 /// Portable scalar implementation, always available regardless of CPU.
 pub mod scalar {
     pub use crate::portable::{hash128, hash256, hash64, State};
+    pub use crate::sip::{
+        scalar_sip_tree_hash as sip_tree_hash, scalar_sip_tree_hash13 as sip_tree_hash13,
+    };
 }
 
 #[cfg(all(test, target_arch = "x86_64", not(feature = "portable-only")))]

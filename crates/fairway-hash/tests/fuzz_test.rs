@@ -10,7 +10,9 @@
 mod common;
 
 use common::{backends, Rng};
-use fairway_hash::{scalar, sip_hash, sip_hash13, HighwayHasher, Key, SipHashKey};
+use fairway_hash::{
+    scalar, sip_hash, sip_hash13, sip_tree_hash, sip_tree_hash13, HighwayHasher, Key, SipHashKey,
+};
 
 const CASES: usize = 2_000;
 const MAX_LEN: usize = 300;
@@ -68,5 +70,50 @@ fn sip_hash_fuzzer() {
         }));
         assert_eq!(sip_hash(key, data), sip_hash(key, data));
         assert_eq!(sip_hash13(key, data), sip_hash13(key, data));
+    }
+}
+
+/// The SIMD tree hash must equal the portable one for every length (so every
+/// tail shape: 0..=7 whole words and 0..=3 trailing bytes), key and
+/// alignment. On machines without AVX2 both sides are the portable code.
+#[test]
+fn sip_tree_hash_fuzzer() {
+    let mut rng = Rng(0xA24B_AED4_963E_E407);
+    let data = rng.bytes(8 * 1024);
+    let random_key = |rng: &mut Rng| Key(core::array::from_fn(|_| rng.next_u64()));
+
+    // Every length up to four packets plus a tail, at a random unaligned start.
+    for len in 0..=(4 * 32 + 31) {
+        let key = random_key(&mut rng);
+        let start = rng.below(32);
+        let input = &data[start..start + len];
+        assert_eq!(
+            sip_tree_hash(key, input),
+            scalar::sip_tree_hash(key, input),
+            "tree24 len {len}, start {start}"
+        );
+        assert_eq!(
+            sip_tree_hash13(key, input),
+            scalar::sip_tree_hash13(key, input),
+            "tree13 len {len}, start {start}"
+        );
+    }
+
+    // Random lengths up to a few KiB.
+    for case in 0..CASES {
+        let key = random_key(&mut rng);
+        let len = rng.below(data.len() - 32);
+        let start = rng.below(32);
+        let input = &data[start..start + len];
+        assert_eq!(
+            sip_tree_hash(key, input),
+            scalar::sip_tree_hash(key, input),
+            "case {case}: tree24 len {len}, start {start}"
+        );
+        assert_eq!(
+            sip_tree_hash13(key, input),
+            scalar::sip_tree_hash13(key, input),
+            "case {case}: tree13 len {len}, start {start}"
+        );
     }
 }

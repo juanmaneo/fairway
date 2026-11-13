@@ -6,7 +6,7 @@ use fairway_hash::vectors::{
     SIP_HASH_OUTPUT, SIP_KEY, SIP_TREE_HASH13_OUTPUT, SIP_TREE_HASH_OUTPUT, SIP_TREE_KEY,
 };
 use fairway_hash::{
-    reduce_sip_tree_hash, reduce_sip_tree_hash13, sip_hash, sip_hash13, sip_tree_hash,
+    reduce_sip_tree_hash, reduce_sip_tree_hash13, scalar, sip_hash, sip_hash13, sip_tree_hash,
     sip_tree_hash13, Key, SipHashKey,
 };
 
@@ -36,10 +36,10 @@ fn sip_hash13_sanity() {
     assert_ne!(sip_hash13(key, b"message"), sip_hash(key, b"message"));
 }
 
-/// Golden values generated with the reference `ScalarSipTreeHash` /
-/// `ScalarSipTreeHash13` (upstream has none) for inputs `0, 1, 2, ...`.
-#[test]
-fn verify_sip_tree_hash() {
+/// Checks a (2-4, 1-3) pair of tree hash functions against golden values
+/// generated with the reference `ScalarSipTreeHash` / `ScalarSipTreeHash13`
+/// (upstream has none) for inputs `0, 1, 2, ...`.
+fn check_tree_hash(tree24: fn(Key, &[u8]) -> u64, tree13: fn(Key, &[u8]) -> u64) {
     let mut input = vec![0u8; 65536];
     for (i, byte) in input.iter_mut().enumerate() {
         *byte = i as u8;
@@ -47,23 +47,32 @@ fn verify_sip_tree_hash() {
     let key = Key(SIP_TREE_KEY);
     for (size, expected) in SIP_TREE_HASH_OUTPUT {
         assert_eq!(
-            sip_tree_hash(key, &input[..size]),
+            tree24(key, &input[..size]),
             expected,
             "tree24 mismatch at length {size}"
         );
     }
     for (size, expected) in SIP_TREE_HASH13_OUTPUT {
         assert_eq!(
-            sip_tree_hash13(key, &input[..size]),
+            tree13(key, &input[..size]),
             expected,
             "tree13 mismatch at length {size}"
         );
     }
     // The two variants are distinct functions.
-    assert_ne!(
-        sip_tree_hash(key, &input[..100]),
-        sip_tree_hash13(key, &input[..100])
-    );
+    assert_ne!(tree24(key, &input[..100]), tree13(key, &input[..100]));
+}
+
+/// The best implementation for this CPU (AVX2 on x86_64 machines that have it).
+#[test]
+fn verify_sip_tree_hash() {
+    check_tree_hash(sip_tree_hash, sip_tree_hash13);
+}
+
+/// The portable implementation, which `sip_tree_hash` falls back to.
+#[test]
+fn verify_scalar_sip_tree_hash() {
+    check_tree_hash(scalar::sip_tree_hash, scalar::sip_tree_hash13);
 }
 
 /// The reduce step matches the reference `ReduceSipTreeHash`, and the

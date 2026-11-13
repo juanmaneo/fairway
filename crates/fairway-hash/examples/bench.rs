@@ -14,8 +14,13 @@
 //! 2. Many independent inputs: a plain loop over `fairway64` versus
 //!    `fairway64_many` (interleaved) and `fairway64_many_par` (interleaved and
 //!    multi-threaded).
+//! 3. SipHash family: `sip_hash` against the portable and the best-available
+//!    (AVX2 where present) `sip_tree_hash`, with `fairway64` for reference.
 
-use fairway_hash::{fairway64, fairway64_many, fairway64_many_par, Backend, HighwayHasher, Key};
+use fairway_hash::{
+    fairway64, fairway64_many, fairway64_many_par, scalar, sip_hash, sip_tree_hash, Backend,
+    HighwayHasher, Key, SipHashKey,
+};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -23,6 +28,9 @@ const KEY: Key = Key([1, 2, 3, 4]);
 /// ~50 ms of hashing per measurement, long enough to smooth jitter.
 const TARGET: Duration = Duration::from_millis(50);
 const SIZES: &[usize] = &[32, 64, 1024, 65536, 1 << 20];
+/// Input sizes for the SipHash family, with the small sizes where the tree
+/// hash overtakes plain SipHash.
+const SIP_SIZES: &[usize] = &[32, 64, 128, 256, 1024, 65536, 1 << 20];
 /// (number of inputs, bytes per input) for the batch benchmark.
 const BATCHES: &[(usize, usize)] = &[
     (4096, 32),
@@ -109,6 +117,33 @@ fn main() {
         println!(
             "{:>8} {:>9} {:>12.0} {:>12.0} {:>12.0}",
             count, size, looped, many, par
+        );
+    }
+
+    println!();
+    println!("SipHash family, one input (SipHash-2-4 variants; MiB/s)");
+    println!(
+        "{:>10} {:>10} {:>12} {:>12} {:>12}",
+        "bytes", "sip_hash", "tree scalar", "tree best", "fairway64"
+    );
+    let sip_key = SipHashKey([KEY.0[0], KEY.0[1]]);
+    for &size in SIP_SIZES {
+        let bytes = &data[..size];
+        let batch = (1 << 16) / bytes.len().max(1) + 1;
+        let run = |f: &dyn Fn(&[u8]) -> u64| {
+            measure(size * batch, || {
+                for _ in 0..batch {
+                    black_box(f(black_box(bytes)));
+                }
+            })
+        };
+        let sip = run(&|b| sip_hash(sip_key, b));
+        let tree_scalar = run(&|b| scalar::sip_tree_hash(KEY, b));
+        let tree_best = run(&|b| sip_tree_hash(KEY, b));
+        let highway = run(&|b| fairway64(KEY, b));
+        println!(
+            "{:>10} {:>10.0} {:>12.0} {:>12.0} {:>12.0}",
+            size, sip, tree_scalar, tree_best, highway
         );
     }
 }
