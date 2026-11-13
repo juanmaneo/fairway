@@ -48,6 +48,8 @@ mod arch;
 mod neon;
 mod portable;
 mod sip;
+#[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
+mod x86_entry;
 #[doc(hidden)]
 #[rustfmt::skip] // Keep the golden tables compact, as transcribed.
 pub mod vectors;
@@ -137,12 +139,12 @@ impl Inner {
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Backend::Avx2 if arch::x86::has_avx2() => {
                 // SAFETY: AVX2 support was just detected.
-                Inner::Avx2(unsafe { arch::x86::avx2::State::new(key) })
+                Inner::Avx2(unsafe { x86_entry::avx2::new(key) })
             }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Backend::Sse41 if arch::x86::has_sse41() => {
                 // SAFETY: SSE4.1 support was just detected.
-                Inner::Sse41(unsafe { arch::x86::sse41::State::new(key) })
+                Inner::Sse41(unsafe { x86_entry::sse41::new(key) })
             }
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
             Backend::Neon => Inner::Neon(neon::State::new(key)),
@@ -151,85 +153,111 @@ impl Inner {
         }
     }
 
-    fn update_packet(&mut self, packet: &[u8; 32]) {
+    /// Feeds whole packets, dispatching on the backend once per call rather
+    /// than once per packet.
+    fn update_packets(&mut self, packets: &[[u8; 32]]) {
         match self {
-            Inner::Portable(s) => s.update_packet(packet),
+            Inner::Portable(s) => {
+                for packet in packets {
+                    s.update_packet(packet);
+                }
+            }
             // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { s.update_packet(packet) },
+            Inner::Avx2(s) => unsafe { x86_entry::avx2::update_packets(s, packets) },
             // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { s.update_packet(packet) },
+            Inner::Sse41(s) => unsafe { x86_entry::sse41::update_packets(s, packets) },
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
-            Inner::Neon(s) => s.update_packet(packet),
+            Inner::Neon(s) => {
+                for packet in packets {
+                    s.update_packet(packet);
+                }
+            }
         }
     }
 
-    fn update_remainder(&mut self, bytes: &[u8]) {
+    /// Finalizes a copy of the state after absorbing `remainder` (0..=31
+    /// bytes), leaving the hasher itself untouched.
+    fn finalize64(&self, remainder: &[u8]) -> u64 {
         match self {
-            Inner::Portable(s) => s.update_remainder(bytes),
+            Inner::Portable(s) => {
+                let mut s = s.clone();
+                if !remainder.is_empty() {
+                    s.update_remainder(remainder);
+                }
+                s.finalize64()
+            }
             // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { s.update_remainder(bytes) },
+            Inner::Avx2(s) => unsafe { x86_entry::avx2::finalize64(s, remainder) },
             // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { s.update_remainder(bytes) },
+            Inner::Sse41(s) => unsafe { x86_entry::sse41::finalize64(s, remainder) },
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
-            Inner::Neon(s) => s.update_remainder(bytes),
+            Inner::Neon(s) => {
+                let mut s = *s;
+                if !remainder.is_empty() {
+                    s.update_remainder(remainder);
+                }
+                s.finalize64()
+            }
         }
     }
 
-    fn finalize64(&mut self) -> u64 {
+    /// Finalizes a copy of the state after absorbing `remainder` (0..=31
+    /// bytes), leaving the hasher itself untouched.
+    fn finalize128(&self, remainder: &[u8]) -> [u64; 2] {
         match self {
-            Inner::Portable(s) => s.finalize64(),
+            Inner::Portable(s) => {
+                let mut s = s.clone();
+                if !remainder.is_empty() {
+                    s.update_remainder(remainder);
+                }
+                s.finalize128()
+            }
             // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { s.finalize64() },
+            Inner::Avx2(s) => unsafe { x86_entry::avx2::finalize128(s, remainder) },
             // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { s.finalize64() },
+            Inner::Sse41(s) => unsafe { x86_entry::sse41::finalize128(s, remainder) },
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
-            Inner::Neon(s) => s.finalize64(),
+            Inner::Neon(s) => {
+                let mut s = *s;
+                if !remainder.is_empty() {
+                    s.update_remainder(remainder);
+                }
+                s.finalize128()
+            }
         }
     }
 
-    fn finalize128(&mut self) -> [u64; 2] {
+    /// Finalizes a copy of the state after absorbing `remainder` (0..=31
+    /// bytes), leaving the hasher itself untouched.
+    fn finalize256(&self, remainder: &[u8]) -> [u64; 4] {
         match self {
-            Inner::Portable(s) => s.finalize128(),
+            Inner::Portable(s) => {
+                let mut s = s.clone();
+                if !remainder.is_empty() {
+                    s.update_remainder(remainder);
+                }
+                s.finalize256()
+            }
             // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { s.finalize128() },
+            Inner::Avx2(s) => unsafe { x86_entry::avx2::finalize256(s, remainder) },
             // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { s.finalize128() },
+            Inner::Sse41(s) => unsafe { x86_entry::sse41::finalize256(s, remainder) },
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
-            Inner::Neon(s) => s.finalize128(),
-        }
-    }
-
-    fn finalize256(&mut self) -> [u64; 4] {
-        match self {
-            Inner::Portable(s) => s.finalize256(),
-            // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
-            #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { s.finalize256() },
-            // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
-            #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { s.finalize256() },
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
-            Inner::Neon(s) => s.finalize256(),
-        }
-    }
-
-    fn clone_inner(&self) -> Inner {
-        match self {
-            Inner::Portable(s) => Inner::Portable(s.clone()),
-            #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => Inner::Avx2(*s),
-            #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => Inner::Sse41(*s),
-            #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
-            Inner::Neon(s) => Inner::Neon(*s),
+            Inner::Neon(s) => {
+                let mut s = *s;
+                if !remainder.is_empty() {
+                    s.update_remainder(remainder);
+                }
+                s.finalize256()
+            }
         }
     }
 }
@@ -288,42 +316,27 @@ impl HighwayHasher {
             return;
         }
         if self.buffer_usage != 0 {
-            let mut tmp = [0u8; 32];
-            tmp[..self.buffer_usage].copy_from_slice(&self.buffer[..self.buffer_usage]);
-            tmp[self.buffer_usage..32].copy_from_slice(&bytes[..capacity]);
-            self.inner.update_packet(&tmp);
+            self.buffer[self.buffer_usage..].copy_from_slice(&bytes[..capacity]);
+            self.inner
+                .update_packets(core::slice::from_ref(&self.buffer));
             bytes = &bytes[capacity..];
         }
         let (chunks, rest) = bytes.as_chunks::<32>();
-        for chunk in chunks {
-            self.inner.update_packet(chunk);
-        }
+        self.inner.update_packets(chunks);
         self.buffer_usage = rest.len();
         self.buffer[..rest.len()].copy_from_slice(rest);
     }
 
     pub fn finalize64(&self) -> u64 {
-        let mut inner = self.inner.clone_inner();
-        if self.buffer_usage != 0 {
-            inner.update_remainder(&self.buffer[..self.buffer_usage]);
-        }
-        inner.finalize64()
+        self.inner.finalize64(&self.buffer[..self.buffer_usage])
     }
 
     pub fn finalize128(&self) -> [u64; 2] {
-        let mut inner = self.inner.clone_inner();
-        if self.buffer_usage != 0 {
-            inner.update_remainder(&self.buffer[..self.buffer_usage]);
-        }
-        inner.finalize128()
+        self.inner.finalize128(&self.buffer[..self.buffer_usage])
     }
 
     pub fn finalize256(&self) -> [u64; 4] {
-        let mut inner = self.inner.clone_inner();
-        if self.buffer_usage != 0 {
-            inner.update_remainder(&self.buffer[..self.buffer_usage]);
-        }
-        inner.finalize256()
+        self.inner.finalize256(&self.buffer[..self.buffer_usage])
     }
 }
 
