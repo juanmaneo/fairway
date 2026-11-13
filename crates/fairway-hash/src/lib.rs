@@ -61,7 +61,8 @@
 //! The SipHash family is included too: [`sip_hash`] and [`sip_hash13`], and
 //! the 256-bit-keyed tree variants [`sip_tree_hash`] and [`sip_tree_hash13`]
 //! (four interleaved SipHash chains over 32-byte packets, reduced to one
-//! hash, on AVX2 or NEON where available and portable code elsewhere;
+//! hash, on AVX-512VL (with the `avx512` feature), AVX2 or NEON where
+//! available and portable code elsewhere;
 //! [`reduce_sip_tree_hash`] combines hashes of independent chunks):
 //!
 //! ```

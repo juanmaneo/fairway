@@ -1,7 +1,8 @@
 //! x86_64 SIMD backends: AVX2 and SSE4.1 (ports of `hh_avx2.h`/`hh_sse41.h`),
 //! plus an AVX-512VL re-encoding of the AVX2 algorithm behind the `avx512`
 //! cargo feature (there is no upstream AVX-512 file to port). `avx2_sip_tree`
-//! is the AVX2 port of `sip_tree_hash.cc`.
+//! is the AVX2 port of `sip_tree_hash.cc`; `avx512_sip_tree` re-encodes it
+//! for AVX-512VL, again behind the `avx512` feature.
 //!
 //! All intrinsics are wrapped in functions that are only called after
 //! runtime feature detection, so callers must uphold that invariant.
@@ -10,6 +11,8 @@ pub mod avx2;
 pub(crate) mod avx2_sip_tree;
 #[cfg(feature = "avx512")]
 pub mod avx512;
+#[cfg(feature = "avx512")]
+pub(crate) mod avx512_sip_tree;
 pub mod sse41;
 
 pub(crate) use super::shared::{load3_allow_read_before_and_return, load3_allow_unordered};

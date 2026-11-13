@@ -171,11 +171,21 @@ pub(crate) fn final_packet(tail: &[u8]) -> [u8; 32] {
     packet
 }
 
-/// The tree hash on the best implementation available: AVX2 on x86_64 when
-/// the CPU has it, NEON on aarch64, the scalar code otherwise. `allow_simd` only ever *disables* SIMD, so
+/// The tree hash on the best implementation available: AVX-512VL (with the
+/// `avx512` feature) or AVX2 on x86_64 when the CPU has it, NEON on aarch64,
+/// the scalar code otherwise. `allow_simd` only ever *disables* SIMD, so
 /// callers need no `unsafe`; it is what lets the tests reach both
 /// implementations on any one machine.
 fn tree_compute<const U: usize, const F: usize>(allow_simd: bool, key: Key, bytes: &[u8]) -> u64 {
+    #[cfg(all(
+        target_arch = "x86_64",
+        feature = "avx512",
+        not(feature = "portable-only")
+    ))]
+    if allow_simd && crate::arch::x86::has_avx512() {
+        // SAFETY: AVX-512 support was just detected.
+        return unsafe { crate::arch::x86::avx512_sip_tree::tree_hash::<U, F>(key, bytes) };
+    }
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
     if allow_simd && crate::arch::x86::has_avx2() {
         // SAFETY: AVX2 support was just detected.
@@ -218,8 +228,9 @@ pub(crate) fn reduce<const U: usize, const F: usize>(key: SipHashKey, hashes: &[
 /// infeasible to compute as long as the key remains secret.
 ///
 /// Uses AVX2 on x86_64 CPUs that have it (one 256-bit register holds the four
-/// chains), NEON on little-endian aarch64 (two 128-bit registers) and the
-/// portable code elsewhere; the result is the same.
+/// chains; AVX-512VL instead, with the `avx512` feature), NEON on
+/// little-endian aarch64 (two 128-bit registers) and the portable code
+/// elsewhere; the result is the same.
 pub fn sip_tree_hash(key: Key, bytes: &[u8]) -> u64 {
     tree_compute::<2, 4>(true, key, bytes)
 }
