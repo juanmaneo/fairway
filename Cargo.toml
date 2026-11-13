@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/fairway-hash", "xtask"]
+members = ["crates/fairway-hash", "crates/fairway-capi", "xtask"]
 
 [workspace.package]
 version = "0.1.1"

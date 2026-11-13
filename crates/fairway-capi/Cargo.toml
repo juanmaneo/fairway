@@ -1,0 +1,28 @@
+[package]
+name = "fairway-capi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "C ABI for fairway-hash: the entry points of upstream HighwayHash's c_bindings.h"
+
+[lib]
+# `rlib` is for the tests; C programs link the static or shared library.
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+fairway-hash = { path = "../fairway-hash" }
+
+[features]
+# Forwarded so `cargo ... --features avx512` / `portable-only` reach the hash
+# backends from the workspace root.
+avx512 = ["fairway-hash/avx512"]
+portable-only = ["fairway-hash/portable-only"]
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"

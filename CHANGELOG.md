@@ -27,6 +27,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (one 8-byte packet), `update_bytes` (a whole message with SipHash padding,
   upstream `UpdateState`), `finalize` and `Clone`. `sip_hash` and `sip_hash13`
   now run on it. Hash output is unchanged.
+- `crates/fairway-capi`: a C ABI with the entry points of upstream
+  `c_bindings.h` under the same names (`SipHashC`, `SipHash13C`,
+  `HighwayHash64` and `HighwayHash64_Target{Portable,SSE41,AVX2,VSX}`), plus
+  `HighwayHash64_TargetNEON`, and the header `include/fairway_capi.h`. It is a
+  separate, unpublished crate (`cargo build --release -p fairway-capi` makes
+  the static and shared libraries), so `fairway-hash` stays free of `extern`
+  functions. Differences from upstream: a `_Target*` function whose
+  instruction set is missing returns the portable result instead of crashing,
+  keys need no alignment, and `_TargetVSX` is always the portable code
+  (fairway has no VSX backend). Checked against the golden vectors from Rust
+  and from a C program linked against the static library.
 
 - `sip_tree_hash`, `sip_tree_hash13`, `reduce_sip_tree_hash` and
   `reduce_sip_tree_hash13`: ports of upstream `SipTreeHash` /

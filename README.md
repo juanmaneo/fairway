@@ -93,6 +93,17 @@ let tree = sip_tree_hash(Key([1, 2, 3, 4]), b"message");
 let combined = reduce_sip_tree_hash(k, &[tree, 42]);
 ```
 
+## C ABI
+
+`crates/fairway-capi` exports the functions of upstream's `c_bindings.h`
+(`SipHashC`, `SipHash13C`, `HighwayHash64` and the `HighwayHash64_Target*`
+family) under the same names; the header is
+`crates/fairway-capi/include/fairway_capi.h`. It is not published to crates.io.
+Build the libraries with `cargo build --release -p fairway-capi` and link
+`target/release/libfairway_capi.a` or `.so`. A `_Target*` function whose
+instruction set is missing returns the portable result instead of crashing;
+fairway has no VSX backend, so `HighwayHash64_TargetVSX` is the portable code.
+
 ## Notes
 
 - The key should be random and secret; attackers who know the key can forge

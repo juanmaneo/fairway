@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "fairway-capi"
+version = "0.1.1"
+dependencies = [
+ "fairway-hash",
+]
+
+[[package]]
 name = "fairway-hash"
 version = "0.1.1"
 
