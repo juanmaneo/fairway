@@ -83,6 +83,19 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `fairway64_many` is much slower on 32-byte batches (46 vs 71 ms) but about
   18% faster on 1 KiB batches (43 vs 36 ms). It therefore stays opt-in; AVX2
   remains the default choice on this hardware.
+- libFuzzer targets in `fuzz/` (its own workspace, so the library stays
+  dependency-free): `highwayhash`, `sip_hash`, `sip_tree_hash` and `batch`.
+  They are differential, checking every backend the CPU has against the
+  portable code, `sip_hash` against an independent SipHash and `std`'s, and the
+  `fairway*_many` functions against single hashing, over random keys, lengths,
+  alignments and streaming splits, on exact-size allocations under
+  AddressSanitizer. Run with `cargo +nightly fuzz run --fuzz-dir fuzz -a
+  <target>` (add `--features avx512` on an AVX-512 machine). Short runs
+  of all four found nothing; deliberately injected bugs (an off-by-one in
+  `update`, a dropped packet in the batch lockstep path or in the scalar tree
+  hash for one length, a one-byte over-read) were each found in a run capped
+    at 60-90 seconds.
+  `tests/fuzz_test.rs` stays as the deterministic stand-in for CI.
 
 ### Fixed
 

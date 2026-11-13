@@ -165,6 +165,45 @@ backend against the portable one). Upstream's `vector_test` and
 `data_parallel_test` cover C++ vector classes and a thread pool, which this
 port doesn't have.
 
+To test a big-endian target from an x86_64 machine with `qemu-ppc64`. Only the
+portable code runs there, so byte-order mistakes show up as wrong hashes (the
+NEON backends are built for little-endian aarch64 only). The `crt-static`
+flags are needed because this target links dynamically by default:
+
+```sh
+rustup target add powerpc64-unknown-linux-musl
+CARGO_TARGET_POWERPC64_UNKNOWN_LINUX_MUSL_RUSTFLAGS="-C target-feature=+crt-static" \
+CARGO_TARGET_POWERPC64_UNKNOWN_LINUX_MUSL_RUSTDOCFLAGS="-C target-feature=+crt-static" \
+CARGO_TARGET_POWERPC64_UNKNOWN_LINUX_MUSL_LINKER=rust-lld \
+CARGO_TARGET_POWERPC64_UNKNOWN_LINUX_MUSL_RUNNER=qemu-ppc64 \
+  cargo test --target powerpc64-unknown-linux-musl --package fairway-hash
+```
+
+### Fuzzing
+
+[`fuzz/`](fuzz) has four libFuzzer targets: `highwayhash`, `sip_hash`,
+`sip_tree_hash` and `batch`. They are differential: every backend the CPU
+supports is compared with the portable code (and `sip_hash` with an
+independent SipHash written from the spec and with `std`'s), over random
+keys, lengths, alignments and streaming splits. They run under
+AddressSanitizer on exact-size allocations, so an out-of-bounds read in a
+SIMD load is reported. The crate has its own workspace, so the main build
+stays dependency-free and offline.
+
+It needs a nightly toolchain and `cargo-fuzz`:
+
+```sh
+cargo install cargo-fuzz
+cargo +nightly fuzz run --fuzz-dir fuzz -a highwayhash              # or sip_hash, sip_tree_hash, batch
+cargo +nightly fuzz run --fuzz-dir fuzz -a highwayhash -- -max_total_time=60
+cargo +nightly fuzz run --fuzz-dir fuzz --features avx512 -a sip_tree_hash   # needs an AVX-512 CPU to cover it
+```
+
+A run goes on until it finds a failure or you stop it; `-a` turns on debug
+assertions. Keep `-max_len` at 4096 or more (the default) for `batch`, which
+needs long inputs to reach its interleaved path. `tests/fuzz_test.rs` is the
+deterministic stand-in that runs in CI.
+
 ## Publishing
 
 ```sh
