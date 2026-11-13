@@ -261,12 +261,16 @@ impl Inner {
                 // SAFETY: an `Inner::Avx512` exists only when AVX-512 was detected.
                 unsafe { x86_entry::avx512::update_packets(s, packets) }
             }
-            // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { x86_entry::avx2::update_packets(s, packets) },
-            // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
+            Inner::Avx2(s) => {
+                // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
+                unsafe { x86_entry::avx2::update_packets(s, packets) }
+            }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { x86_entry::sse41::update_packets(s, packets) },
+            Inner::Sse41(s) => {
+                // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
+                unsafe { x86_entry::sse41::update_packets(s, packets) }
+            }
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
             Inner::Neon(s) => {
                 for packet in packets {
@@ -296,12 +300,16 @@ impl Inner {
                 // SAFETY: an `Inner::Avx512` exists only when AVX-512 was detected.
                 unsafe { x86_entry::avx512::finalize64(s, remainder) }
             }
-            // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { x86_entry::avx2::finalize64(s, remainder) },
-            // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
+            Inner::Avx2(s) => {
+                // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
+                unsafe { x86_entry::avx2::finalize64(s, remainder) }
+            }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { x86_entry::sse41::finalize64(s, remainder) },
+            Inner::Sse41(s) => {
+                // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
+                unsafe { x86_entry::sse41::finalize64(s, remainder) }
+            }
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
             Inner::Neon(s) => {
                 let mut s = *s;
@@ -333,12 +341,16 @@ impl Inner {
                 // SAFETY: an `Inner::Avx512` exists only when AVX-512 was detected.
                 unsafe { x86_entry::avx512::finalize128(s, remainder) }
             }
-            // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { x86_entry::avx2::finalize128(s, remainder) },
-            // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
+            Inner::Avx2(s) => {
+                // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
+                unsafe { x86_entry::avx2::finalize128(s, remainder) }
+            }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { x86_entry::sse41::finalize128(s, remainder) },
+            Inner::Sse41(s) => {
+                // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
+                unsafe { x86_entry::sse41::finalize128(s, remainder) }
+            }
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
             Inner::Neon(s) => {
                 let mut s = *s;
@@ -370,12 +382,16 @@ impl Inner {
                 // SAFETY: an `Inner::Avx512` exists only when AVX-512 was detected.
                 unsafe { x86_entry::avx512::finalize256(s, remainder) }
             }
-            // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Avx2(s) => unsafe { x86_entry::avx2::finalize256(s, remainder) },
-            // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
+            Inner::Avx2(s) => {
+                // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
+                unsafe { x86_entry::avx2::finalize256(s, remainder) }
+            }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Inner::Sse41(s) => unsafe { x86_entry::sse41::finalize256(s, remainder) },
+            Inner::Sse41(s) => {
+                // SAFETY: an `Inner::Sse41` exists only when SSE4.1 was detected.
+                unsafe { x86_entry::sse41::finalize256(s, remainder) }
+            }
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
             Inner::Neon(s) => {
                 let mut s = *s;

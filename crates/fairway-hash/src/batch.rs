@@ -83,12 +83,16 @@ impl Group {
                 // SAFETY: a `Group::Avx512` exists only when AVX-512 was detected.
                 unsafe { x86_entry::avx512::update_lockstep(states, streams) }
             }
-            // SAFETY: a `Group::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Group::Avx2(states) => unsafe { x86_entry::avx2::update_lockstep(states, streams) },
-            // SAFETY: a `Group::Sse41` exists only when SSE4.1 was detected.
+            Group::Avx2(states) => {
+                // SAFETY: a `Group::Avx2` exists only when AVX2 was detected.
+                unsafe { x86_entry::avx2::update_lockstep(states, streams) }
+            }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-            Group::Sse41(states) => unsafe { x86_entry::sse41::update_lockstep(states, streams) },
+            Group::Sse41(states) => {
+                // SAFETY: a `Group::Sse41` exists only when SSE4.1 was detected.
+                unsafe { x86_entry::sse41::update_lockstep(states, streams) }
+            }
             #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
             Group::Neon(states) => lockstep(states, streams, |s, p| s.update_packet(p)),
         }
