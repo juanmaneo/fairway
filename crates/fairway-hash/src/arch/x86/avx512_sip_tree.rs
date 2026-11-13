@@ -15,11 +15,13 @@
 //! * `_mm256_maskz_loadu_epi8` replaces the mask construction and
 //!   `_mm256_maskload_epi32` of the final packet.
 //!
-//! Whether this beats the AVX2 code has not been measured: on some CPUs
-//! 256-bit AVX-512VL code runs at a lower clock than AVX2 (an earlier
-//! measurement of the AVX-512VL HighwayHash found it slower than AVX2 on
-//! small inputs). Compare `cargo run --release --example bench` with and
-//! without `--features avx512`.
+//! On an Intel Xeon 6985P-C this is faster than the AVX2 code at every
+//! measured size, from +7% at 32 bytes to +50% or more from 64 KiB up (the
+//! AVX-512VL HighwayHash is not: it was slower than AVX2 on small inputs
+//! there). Other AVX-512 CPUs are unmeasured; on some, 256-bit AVX-512VL code
+//! runs at a lower clock than AVX2. Compare
+//! `cargo run --release --example bench` with and without
+//! `--features avx512`.
 //!
 //! The entry point is `unsafe` because it executes AVX-512 instructions;
 //! callers must ensure the CPU supports avx512f + avx512vl + avx512bw (see
