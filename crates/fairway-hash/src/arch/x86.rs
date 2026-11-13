@@ -2,7 +2,9 @@
 //! plus an AVX-512VL re-encoding of the AVX2 algorithm behind the `avx512`
 //! cargo feature (there is no upstream AVX-512 file to port). `avx2_sip_tree`
 //! is the AVX2 port of `sip_tree_hash.cc`; `avx512_sip_tree` re-encodes it
-//! for AVX-512VL, again behind the `avx512` feature.
+//! for AVX-512VL, again behind the `avx512` feature. `entry` holds the
+//! `#[target_feature]` entry points the rest of the crate calls the backends
+//! through.
 //!
 //! All intrinsics are wrapped in functions that are only called after
 //! runtime feature detection, so callers must uphold that invariant.
@@ -13,6 +15,7 @@ pub(crate) mod avx2_sip_tree;
 pub mod avx512;
 #[cfg(feature = "avx512")]
 pub(crate) mod avx512_sip_tree;
+pub(crate) mod entry;
 pub mod sse41;
 
 pub(crate) use super::shared::{load3_allow_read_before_and_return, load3_allow_unordered};

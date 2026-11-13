@@ -1,6 +1,8 @@
 //! Architecture-specific code. Shared byte-loading helpers live here so both
 //! x86 and aarch64 backends use identical length-padding semantics.
 
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
+pub mod aarch64;
 #[cfg(target_arch = "x86_64")]
 pub mod x86;
 

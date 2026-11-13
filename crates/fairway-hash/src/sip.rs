@@ -197,7 +197,7 @@ fn tree_compute<const U: usize, const F: usize>(allow_simd: bool, key: Key, byte
         not(feature = "portable-only")
     ))]
     if allow_simd {
-        return crate::neon_sip_tree::tree_hash::<U, F>(key, bytes);
+        return crate::arch::aarch64::neon_sip_tree::tree_hash::<U, F>(key, bytes);
     }
     #[cfg(not(any(
         all(target_arch = "x86_64", not(feature = "portable-only")),

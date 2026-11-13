@@ -10,14 +10,14 @@
 use crate::{best_backend, Backend, Inner, Key};
 
 #[cfg(all(
-    target_arch = "aarch64",
-    target_endian = "little",
+    any(
+        target_arch = "x86_64",
+        all(target_arch = "aarch64", target_endian = "little")
+    ),
     not(feature = "portable-only")
 ))]
-use crate::neon;
+use crate::arch;
 use crate::portable;
-#[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-use crate::{arch, x86_entry};
 
 /// Number of inputs advanced together. Six independent chains hide the
 /// multiply latency; measured against four and eight on Zen 3 (AVX2), six
@@ -52,7 +52,7 @@ enum Group {
         target_endian = "little",
         not(feature = "portable-only")
     ))]
-    Neon([neon::State; LANES]),
+    Neon([arch::aarch64::neon::State; LANES]),
 }
 
 impl Group {
@@ -93,17 +93,17 @@ impl Group {
             ))]
             Group::Avx512(states) => {
                 // SAFETY: a `Group::Avx512` exists only when AVX-512 was detected.
-                unsafe { x86_entry::avx512::update_lockstep(states, streams) }
+                unsafe { arch::x86::entry::avx512::update_lockstep(states, streams) }
             }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Group::Avx2(states) => {
                 // SAFETY: a `Group::Avx2` exists only when AVX2 was detected.
-                unsafe { x86_entry::avx2::update_lockstep(states, streams) }
+                unsafe { arch::x86::entry::avx2::update_lockstep(states, streams) }
             }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Group::Sse41(states) => {
                 // SAFETY: a `Group::Sse41` exists only when SSE4.1 was detected.
-                unsafe { x86_entry::sse41::update_lockstep(states, streams) }
+                unsafe { arch::x86::entry::sse41::update_lockstep(states, streams) }
             }
             #[cfg(all(
                 target_arch = "aarch64",
