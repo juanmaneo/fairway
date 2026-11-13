@@ -18,11 +18,38 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `HighwayHasher::update` dispatches on the backend once per call instead of
   once per 32-byte packet, and no longer copies the completed packet through
   a temporary buffer.
+- `fairway64` / `fairway128` / `fairway256` feed whole packets straight from
+  the input and the tail straight into finalization, instead of going through
+  the incremental hasher and its 32-byte buffer.
 
 ### Added
 
+- Batch hashing of many independent inputs: `fairway64_many`,
+  `fairway128_many` and `fairway256_many`. A single hash is a serial chain,
+  so the CPU idles between steps; four inputs are advanced together to fill
+  those gaps. Output is identical to calling the one-shot functions in a
+  loop, and any byte-like input type works (`&[u8]`, `Vec<u8>`, `String`).
+  On a Zen 3 laptop this is about 1.4x faster than a loop for inputs of
+  several KiB and larger (9.5 GiB/s against 6.9 GiB/s), 1.2-1.5x from 256
+  bytes to a few KiB, and about 2x for inputs of 64 bytes or less (one key
+  schedule for the whole batch).
+- `fairway64_many_par`, `fairway128_many_par` and `fairway256_many_par`
+  (`std` feature): the same, spread over scoped threads when the batch is
+  large enough to pay for them (16-24 GiB/s on a 16-thread laptop for batches of
+  16-128 MiB, against 6.8 GiB/s for a loop). The crate still has no dependencies.
 - `examples/bench.rs`, a zero-dependency throughput benchmark
   (`cargo run --release --example bench`).
+
+### Known limitations
+
+- The speedups above assume the compiler inlines the AVX2 / SSE4.1 backends
+  into the entry points. That always happens for the update loop (large
+  inputs reach about 6.5 GiB/s with the default release profile), but for
+  *small* inputs on AVX2 the finalization code is only inlined with link-time
+  optimization (`lto = true`) or `-C target-cpu=native` / `-C
+  target-feature=+avx2`. Without either, a 32-byte AVX2 hash still runs at
+  about 30 MiB/s, as in 0.1.0. Applications that hash many small inputs
+  with the AVX2 backend should enable one of them.
 
 ## [0.1.0] - 2026-11-12
 

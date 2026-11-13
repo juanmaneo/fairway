@@ -42,6 +42,14 @@ let h256: [u64; 4] = h.finalize256();
 use fairway_hash::{fairway64, fairway128, fairway256};
 assert_eq!(fairway64(key, b"abc"), fairway64(key, b"abc"));
 
+// Many independent inputs at once (about 1.4x faster than a loop on large
+// inputs, 2x on tiny ones; `_par` also uses several threads for big batches):
+use fairway_hash::{fairway64_many, fairway64_many_par};
+let inputs = [&b"alpha"[..], b"beta", b"gamma"];
+let mut out = [0u64; 3];
+fairway64_many(key, &inputs, &mut out);
+assert_eq!(out[1], fairway64(key, b"beta"));
+
 // Force a specific backend (e.g. for cross-checking):
 use fairway_hash::{Backend, HighwayHasher};
 let mut h = HighwayHasher::with_backend(key, Backend::Portable);
@@ -74,6 +82,22 @@ let mac13 = sip_hash13(k, b"message");
   (`#[target_feature(enable = "avx2")]`); `HighwayHasher` and the one-shot
   helpers already do this for you.
 - MSRV: Rust 1.88.
+
+## Performance
+
+On a Zen 3 laptop with the AVX2 backend, one-shot hashing runs at about
+6.5-7 GiB/s on large inputs, and `fairway64_many` at about 9.5 GiB/s. Hashing a
+*single* input is a serial chain and cannot be spread over threads; the
+`fairway*_many` functions interleave several independent inputs instead, and
+`fairway*_many_par` adds threads (`std` feature, no dependencies) once a batch
+holds a few MiB per thread. Run `cargo run --release --example bench`
+to measure your own machine.
+
+For *small* inputs the AVX2 backend is only fast when the compiler can inline
+its finalization code, which needs link-time optimization (`lto = true` in your
+release profile) or `RUSTFLAGS="-C target-cpu=native"` (or `-C
+target-feature=+avx2`). Without either, a 32-byte hash takes about as long as
+it did in 0.1.0 (about 30 MiB/s). Large inputs are fast either way.
 
 ## Development
 
