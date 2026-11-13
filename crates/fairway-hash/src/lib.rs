@@ -110,7 +110,7 @@ pub use batch::{fairway128_many, fairway256_many, fairway64_many};
 pub use batch::{fairway128_many_par, fairway256_many_par, fairway64_many_par};
 pub use sip::{
     reduce_sip_tree_hash, reduce_sip_tree_hash13, sip_hash, sip_hash13, sip_tree_hash,
-    sip_tree_hash13, SipHashKey,
+    sip_tree_hash13, SipHash13State, SipHashKey, SipHashState, SipState,
 };
 
 /// 256-bit secret key. Keep it unknown to attackers; initialize it randomly.

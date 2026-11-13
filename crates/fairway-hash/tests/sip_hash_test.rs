@@ -7,7 +7,7 @@ use fairway_hash::vectors::{
 };
 use fairway_hash::{
     reduce_sip_tree_hash, reduce_sip_tree_hash13, scalar, sip_hash, sip_hash13, sip_tree_hash,
-    sip_tree_hash13, Key, SipHashKey,
+    sip_tree_hash13, Key, SipHash13State, SipHashKey, SipHashState,
 };
 
 /// Known-good SipHash-2-4 output from D. Bernstein, for the empty string,
@@ -23,6 +23,57 @@ fn verify_sip_hash() {
             "Mismatch at length {size}"
         );
     }
+}
+
+/// The public incremental state (upstream `SipHashState`): `update_bytes`
+/// reproduces `sip_hash`, and feeding packets by hand with the padding
+/// packet built by the caller gives the same hash.
+#[test]
+fn sip_hash_state_matches_sip_hash() {
+    let input = common::golden_input();
+    let key = SipHashKey::from(SIP_KEY);
+    for size in 0..64 {
+        let bytes = &input[..size];
+        let mut state = SipHashState::new(key);
+        state.update_bytes(bytes);
+        assert_eq!(state.finalize(), SIP_HASH_OUTPUT[size], "length {size}");
+
+        let mut state = SipHash13State::new(key);
+        state.update_bytes(bytes);
+        assert_eq!(
+            state.finalize(),
+            sip_hash13(key, bytes),
+            "1-3, length {size}"
+        );
+
+        let mut state = SipHashState::new(key);
+        let (packets, rest) = bytes.as_chunks::<8>();
+        for packet in packets {
+            state.update(packet);
+        }
+        let mut last = [0u8; 8];
+        last[..rest.len()].copy_from_slice(rest);
+        last[7] = size as u8;
+        state.update(&last);
+        assert_eq!(
+            state.finalize(),
+            SIP_HASH_OUTPUT[size],
+            "by hand, length {size}"
+        );
+    }
+}
+
+/// A cloned state continues independently of the original.
+#[test]
+fn sip_hash_state_clone_forks() {
+    let key = SipHashKey::from(SIP_KEY);
+    let mut state = SipHashState::new(key);
+    state.update(&[1; 8]);
+    let fork = state.clone();
+    state.update(&[2; 8]);
+    let mut expected = SipHashState::new(key);
+    expected.update(&[1; 8]);
+    assert_eq!(fork.finalize(), expected.finalize());
 }
 
 /// Rust-specific: upstream has no SipHash-1-3 vectors, so check it is a

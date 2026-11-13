@@ -22,6 +22,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `SipHashState` and `SipHash13State` (both `SipState<U, F>`): the public
+  incremental SipHash state of upstream `SipHashStateT`, with `new`, `update`
+  (one 8-byte packet), `update_bytes` (a whole message with SipHash padding,
+  upstream `UpdateState`), `finalize` and `Clone`. `sip_hash` and `sip_hash13`
+  now run on it. Hash output is unchanged.
+
 - `sip_tree_hash`, `sip_tree_hash13`, `reduce_sip_tree_hash` and
   `reduce_sip_tree_hash13`: ports of upstream `SipTreeHash` /
   `ScalarSipTreeHash` and `ReduceSipTreeHash` (`sip_tree_hash.h`,

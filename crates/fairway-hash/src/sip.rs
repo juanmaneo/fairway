@@ -19,16 +19,33 @@ impl From<[u64; 2]> for SipHashKey {
     }
 }
 
-struct SipHashState<const UPDATE_ITERS: usize, const FINALIZE_ITERS: usize> {
+/// Incremental SipHash state with `U` rounds per packet and `F` rounds in
+/// finalization (upstream `SipHashStateT`); use the [`SipHashState`] and
+/// [`SipHash13State`] aliases.
+///
+/// This is the raw state: [`SipState::update`] absorbs one 8-byte packet and
+/// [`SipState::finalize`] adds no padding, so the caller builds the final
+/// packet. [`SipState::update_bytes`] does that for a whole byte string,
+/// and `sip_hash` is exactly `new`, `update_bytes`, `finalize`.
+#[derive(Clone)]
+pub struct SipState<const U: usize, const F: usize> {
     v0: u64,
     v1: u64,
     v2: u64,
     v3: u64,
 }
 
-impl<const U: usize, const F: usize> SipHashState<U, F> {
-    fn new(key: [u64; 2]) -> Self {
-        SipHashState {
+/// Incremental SipHash-2-4 (upstream `SipHashState`).
+pub type SipHashState = SipState<2, 4>;
+
+/// Incremental SipHash-1-3 (upstream `SipHash13State`).
+pub type SipHash13State = SipState<1, 3>;
+
+impl<const U: usize, const F: usize> SipState<U, F> {
+    /// A fresh state for `key`.
+    pub fn new(key: SipHashKey) -> Self {
+        let key = key.0;
+        SipState {
             v0: 0x736f6d6570736575 ^ key[0],
             v1: 0x646f72616e646f6d ^ key[1],
             v2: 0x6c7967656e657261 ^ key[0],
@@ -39,7 +56,7 @@ impl<const U: usize, const F: usize> SipHashState<U, F> {
     /// The per-lane state of the tree hash: one key word, tagged with the
     /// number of lanes and the lane index.
     fn new_tree_lane(lane_key: u64) -> Self {
-        SipHashState {
+        SipState {
             v0: 0x736f6d6570736575 ^ lane_key,
             v1: 0x646f72616e646f6d ^ lane_key,
             v2: 0x6c7967656e657261 ^ lane_key,
@@ -47,9 +64,25 @@ impl<const U: usize, const F: usize> SipHashState<U, F> {
         }
     }
 
+    /// Absorbs one 8-byte packet (read little-endian).
     #[inline(always)]
-    fn update(&mut self, bytes: &[u8; 8]) {
-        self.update_u64(u64::from_le_bytes(*bytes));
+    pub fn update(&mut self, packet: &[u8; 8]) {
+        self.update_u64(u64::from_le_bytes(*packet));
+    }
+
+    /// Absorbs `bytes` as a complete SipHash message: its whole 8-byte
+    /// packets, then the zero-padded remainder with the length (mod 256) in
+    /// the last byte (upstream `UpdateState`). It ends the message, so call it
+    /// once per hash: two calls are not the hash of the concatenation.
+    pub fn update_bytes(&mut self, bytes: &[u8]) {
+        let (chunks, rest) = bytes.as_chunks::<8>();
+        for chunk in chunks {
+            self.update(chunk);
+        }
+        let mut final_packet = [0u8; 8];
+        final_packet[..rest.len()].copy_from_slice(rest);
+        final_packet[7] = bytes.len() as u8;
+        self.update(&final_packet);
     }
 
     #[inline(always)]
@@ -59,8 +92,9 @@ impl<const U: usize, const F: usize> SipHashState<U, F> {
         self.v0 ^= packet;
     }
 
+    /// The 64-bit hash of what was absorbed.
     #[inline(always)]
-    fn finalize(mut self) -> u64 {
+    pub fn finalize(mut self) -> u64 {
         self.v2 ^= 0xFF;
         self.compress::<F>();
         (self.v0 ^ self.v1) ^ (self.v2 ^ self.v3)
@@ -83,30 +117,21 @@ impl<const U: usize, const F: usize> SipHashState<U, F> {
     }
 }
 
-fn compute<const U: usize, const F: usize>(key: [u64; 2], bytes: &[u8]) -> u64 {
-    let mut state = SipHashState::<U, F>::new(key);
-    let (chunks, rest) = bytes.as_chunks::<8>();
-    for chunk in chunks {
-        state.update(chunk);
-    }
-    // SipHash padding: remaining bytes, then zeros, with the total length in
-    // the final byte.
-    let mut final_packet = [0u8; 8];
-    final_packet[..rest.len()].copy_from_slice(rest);
-    final_packet[7] = bytes.len() as u8;
-    state.update(&final_packet);
+fn compute<const U: usize, const F: usize>(key: SipHashKey, bytes: &[u8]) -> u64 {
+    let mut state = SipState::<U, F>::new(key);
+    state.update_bytes(bytes);
     state.finalize()
 }
 
 /// SipHash-2-4: fast, cryptographically strong PRF. Matches the reference
 /// implementation byte-for-byte.
 pub fn sip_hash(key: SipHashKey, bytes: &[u8]) -> u64 {
-    compute::<2, 4>(key.0, bytes)
+    compute::<2, 4>(key, bytes)
 }
 
 /// SipHash-1-3: faster but weaker variant (1 update round, 3 finalization).
 pub fn sip_hash13(key: SipHashKey, bytes: &[u8]) -> u64 {
-    compute::<1, 3>(key.0, bytes)
+    compute::<1, 3>(key, bytes)
 }
 
 /// Number of independent SipHash chains interleaved by the tree hash.
@@ -124,9 +149,9 @@ fn packet_words(packet: &[u8; 32]) -> [u64; TREE_LANES] {
 /// chains, one per 8-byte word of each 32-byte packet, reduced to one
 /// 64-bit hash by a final SipHash over the four results.
 fn tree_compute_scalar<const U: usize, const F: usize>(key: Key, bytes: &[u8]) -> u64 {
-    let mut lanes: [SipHashState<U, F>; TREE_LANES] = core::array::from_fn(|lane| {
+    let mut lanes: [SipState<U, F>; TREE_LANES] = core::array::from_fn(|lane| {
         // `TREE_LANES | lane` is the lane tag of the reference.
-        SipHashState::new_tree_lane(key.0[lane] ^ (TREE_LANES | lane) as u64)
+        SipState::new_tree_lane(key.0[lane] ^ (TREE_LANES | lane) as u64)
     });
     let (packets, tail) = bytes.as_chunks::<32>();
     for packet in packets {
@@ -214,7 +239,7 @@ fn tree_compute<const U: usize, const F: usize>(allow_simd: bool, key: Key, byte
 /// `ReduceSipTreeHash`: SipHash over the lane hashes, with no length
 /// padding packet.
 pub(crate) fn reduce<const U: usize, const F: usize>(key: SipHashKey, hashes: &[u64]) -> u64 {
-    let mut state = SipHashState::<U, F>::new(key.0);
+    let mut state = SipState::<U, F>::new(key);
     for hash in hashes {
         state.update_u64(*hash);
     }
