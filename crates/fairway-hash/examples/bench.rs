@@ -64,7 +64,14 @@ fn main() {
         .collect();
     println!("single input (streaming update + finalize64)");
     println!("{:>10} {:>10} {:>12}", "bytes", "backend", "MiB/s");
-    for &backend in [Backend::Avx2, Backend::Sse41, Backend::Portable].iter() {
+    let backends = [
+        Backend::Avx2,
+        Backend::Sse41,
+        #[cfg(all(target_arch = "x86_64", feature = "avx512"))]
+        Backend::Avx512,
+        Backend::Portable,
+    ];
+    for &backend in backends.iter() {
         for &size in SIZES {
             let mib_s = single_input(backend, &data[..size]);
             println!("{:>10} {:>10} {:>12.0}", size, backend.name(), mib_s);

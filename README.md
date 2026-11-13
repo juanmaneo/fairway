@@ -22,6 +22,7 @@ reference vectors, and the streaming "cat" equivalence test) on every backend.
 
 | Backend | Platforms | Selection |
 |---|---|---|
+| AVX-512VL | x86_64 | runtime-detected; off-by-default `avx512` feature (needs Rust 1.89+ when enabled) |
 | AVX2 | x86_64 | runtime-detected |
 | SSE4.1 | x86_64 | runtime-detected |
 | NEON | aarch64 | always available |
@@ -87,7 +88,7 @@ let mac13 = sip_hash13(k, b"message");
   in use.
 - Without `std`, SIMD backends are only used when enabled at compile time
   (e.g. `-C target-feature=+avx2`), since runtime detection needs `std`.
-- MSRV: Rust 1.88.
+- MSRV: Rust 1.88 (the off-by-default `avx512` feature needs 1.89+ when enabled).
 
 ## Performance
 

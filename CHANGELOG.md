@@ -28,6 +28,23 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   done once, which is about 1.5x faster for inputs under 1 KiB when many
   inputs share one key (22 million 32-byte hashes per second on one Zen 3
   core, against 15 million for `fairway64`).
+- Optional AVX-512VL backend on x86_64 behind the new off-by-default `avx512`
+  cargo feature: the AVX2 algorithm re-encoded with EVEX instructions on
+  256-bit registers (`_mm256_rolv_epi32`, `_mm256_ternarylogic_epi32`,
+  `_mm256_maskz_loadu_epi8`). Selected at runtime when
+  avx512f+avx512vl+avx512bw are detected, forcible with
+  `HighwayHasher::with_backend(_, Backend::Avx512)` (falls back to portable
+  where unsupported). Hash output is unchanged: the golden vectors pass on
+  AVX-512 hardware, and the fuzzer cross-checks it against the portable
+  backend. Enabling the feature requires Rust 1.89+, where the AVX-512
+  intrinsics and target features were stabilized; the crate's MSRV stays
+  1.88 without it. Measured on an Emerald Rapids Xeon 6985P (one core, LTO
+  off, 64 MiB per run, hyperfine, 15 runs): not a win for the common one-shot
+  path there — `fairway64` on 32-byte inputs is about 25% slower than AVX2
+  (64 vs 81 ms per 64 MiB), about 10% slower at 1 KiB, equal at 1 MiB — and
+  `fairway64_many` is much slower on 32-byte batches (46 vs 71 ms) but about
+  18% faster on 1 KiB batches (43 vs 36 ms). It therefore stays opt-in; AVX2
+  remains the default choice on this hardware.
 
 ## [0.1.1] - 2026-11-13
 

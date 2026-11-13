@@ -4,11 +4,14 @@
 
 use fairway_hash::{Backend, HighwayHasher, Key};
 
-/// Every backend, in the order the C++ `InstructionSets::RunAll` visits them.
-pub const ALL_BACKENDS: [Backend; 4] = [
+/// Every backend, in the order the C++ `InstructionSets::RunAll` visits them
+/// (AVX-512VL slots in after AVX2 when the `avx512` feature is enabled).
+pub const ALL_BACKENDS: &[Backend] = &[
     Backend::Portable,
     Backend::Sse41,
     Backend::Avx2,
+    #[cfg(all(target_arch = "x86_64", feature = "avx512"))]
+    Backend::Avx512,
     Backend::Neon,
 ];
 
@@ -16,7 +19,8 @@ pub const ALL_BACKENDS: [Backend; 4] = [
 /// portable for the others). Printed so a CI log shows what was covered.
 pub fn backends() -> Vec<Backend> {
     let available: Vec<Backend> = ALL_BACKENDS
-        .into_iter()
+        .iter()
+        .copied()
         .filter(|&b| HighwayHasher::with_backend(Key([0; 4]), b).backend() == b)
         .collect();
     eprintln!("backends under test: {available:?}");

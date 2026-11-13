@@ -23,6 +23,9 @@ const FEATURE_SETS: &[&[&str]] = &[
     &["--no-default-features"],
     &["--features", "portable-only"],
     &["--no-default-features", "--features", "portable-only"],
+    &["--features", "avx512"],
+    &["--no-default-features", "--features", "avx512"],
+    &["--features", "portable-only,avx512"],
 ];
 
 /// Coverage floor (percent): 100 — every file, line and region must be

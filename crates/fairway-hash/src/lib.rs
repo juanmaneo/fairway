@@ -7,6 +7,8 @@
 //! upstream C++ library (verified against its golden test vectors) and picks
 //! the best available implementation at runtime:
 //!
+//! * AVX-512VL on x86_64 behind the off-by-default `avx512` cargo feature
+//!   (requires Rust 1.89+ when enabled; the MSRV stays 1.88 without it),
 //! * AVX2 and SSE4.1 on x86_64 (via `core::arch`, detected with `std::arch`),
 //! * NEON on aarch64,
 //! * a portable scalar fallback everywhere else (also covers big-endian).
@@ -79,6 +81,12 @@ mod x86_entry;
 #[rustfmt::skip] // Keep the golden tables compact, as transcribed.
 pub mod vectors;
 
+#[cfg(all(
+    target_arch = "x86_64",
+    feature = "avx512",
+    not(feature = "portable-only")
+))]
+pub use arch::x86::avx512;
 #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
 pub use arch::x86::{avx2, sse41};
 
@@ -101,6 +109,8 @@ impl From<[u64; 4]> for Key {
 /// Which backend produced a hash / is available on this machine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Backend {
+    #[cfg(all(target_arch = "x86_64", feature = "avx512"))]
+    Avx512,
     Avx2,
     Sse41,
     Neon,
@@ -110,6 +120,8 @@ pub enum Backend {
 impl Backend {
     pub fn name(self) -> &'static str {
         match self {
+            #[cfg(all(target_arch = "x86_64", feature = "avx512"))]
+            Backend::Avx512 => "AVX512VL",
             Backend::Avx2 => "AVX2",
             Backend::Sse41 => "SSE4.1",
             Backend::Neon => "NEON",
@@ -122,7 +134,13 @@ impl Backend {
 /// every branch is unit-testable on any machine (see `backend_tests`);
 /// `best_backend` only adds the platform rules on top.
 #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
-fn best_backend_for(avx2: bool, sse41: bool) -> Backend {
+fn best_backend_for(avx512: bool, avx2: bool, sse41: bool) -> Backend {
+    #[cfg(feature = "avx512")]
+    if avx512 {
+        return Backend::Avx512;
+    }
+    #[cfg(not(feature = "avx512"))]
+    let _ = avx512; // No AVX-512 backend in this build.
     if avx2 {
         Backend::Avx2
     } else if sse41 {
@@ -136,7 +154,11 @@ fn best_backend_for(avx2: bool, sse41: bool) -> Backend {
 pub fn best_backend() -> Backend {
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
     {
-        best_backend_for(arch::x86::has_avx2(), arch::x86::has_sse41())
+        #[cfg(feature = "avx512")]
+        let avx512 = arch::x86::has_avx512();
+        #[cfg(not(feature = "avx512"))]
+        let avx512 = false;
+        best_backend_for(avx512, arch::x86::has_avx2(), arch::x86::has_sse41())
     }
     #[cfg(all(target_arch = "aarch64", not(feature = "portable-only")))]
     {
@@ -154,6 +176,12 @@ pub fn best_backend() -> Backend {
 #[derive(Clone)]
 enum Inner {
     Portable(portable::State),
+    #[cfg(all(
+        target_arch = "x86_64",
+        feature = "avx512",
+        not(feature = "portable-only")
+    ))]
+    Avx512(arch::x86::avx512::State),
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
     Avx2(arch::x86::avx2::State),
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -165,6 +193,15 @@ enum Inner {
 impl Inner {
     fn new(key: Key, backend: Backend) -> Self {
         match backend {
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Backend::Avx512 if arch::x86::has_avx512() => {
+                // SAFETY: AVX-512 support was just detected.
+                Inner::Avx512(unsafe { x86_entry::avx512::new(key) })
+            }
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Backend::Avx2 if arch::x86::has_avx2() => {
                 // SAFETY: AVX2 support was just detected.
@@ -191,6 +228,15 @@ impl Inner {
                     s.update_packet(packet);
                 }
             }
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Inner::Avx512(s) => {
+                // SAFETY: an `Inner::Avx512` exists only when AVX-512 was detected.
+                unsafe { x86_entry::avx512::update_packets(s, packets) }
+            }
             // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Inner::Avx2(s) => unsafe { x86_entry::avx2::update_packets(s, packets) },
@@ -216,6 +262,15 @@ impl Inner {
                     s.update_remainder(remainder);
                 }
                 s.finalize64()
+            }
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Inner::Avx512(s) => {
+                // SAFETY: an `Inner::Avx512` exists only when AVX-512 was detected.
+                unsafe { x86_entry::avx512::finalize64(s, remainder) }
             }
             // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -245,6 +300,15 @@ impl Inner {
                 }
                 s.finalize128()
             }
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Inner::Avx512(s) => {
+                // SAFETY: an `Inner::Avx512` exists only when AVX-512 was detected.
+                unsafe { x86_entry::avx512::finalize128(s, remainder) }
+            }
             // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Inner::Avx2(s) => unsafe { x86_entry::avx2::finalize128(s, remainder) },
@@ -272,6 +336,15 @@ impl Inner {
                     s.update_remainder(remainder);
                 }
                 s.finalize256()
+            }
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Inner::Avx512(s) => {
+                // SAFETY: an `Inner::Avx512` exists only when AVX-512 was detected.
+                unsafe { x86_entry::avx512::finalize256(s, remainder) }
             }
             // SAFETY: an `Inner::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -321,6 +394,12 @@ impl HighwayHasher {
     pub fn backend(&self) -> Backend {
         match &self.inner {
             Inner::Portable(_) => Backend::Portable,
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Inner::Avx512(_) => Backend::Avx512,
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Inner::Avx2(_) => Backend::Avx2,
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -457,17 +536,37 @@ mod backend_tests {
 
     #[test]
     fn avx2_wins_over_sse41() {
-        assert_eq!(super::best_backend_for(true, true), Backend::Avx2);
-        assert_eq!(super::best_backend_for(true, false), Backend::Avx2);
+        assert_eq!(super::best_backend_for(false, true, true), Backend::Avx2);
+        assert_eq!(super::best_backend_for(false, true, false), Backend::Avx2);
     }
 
     #[test]
     fn sse41_used_when_avx2_is_missing() {
-        assert_eq!(super::best_backend_for(false, true), Backend::Sse41);
+        assert_eq!(super::best_backend_for(false, false, true), Backend::Sse41);
     }
 
     #[test]
     fn portable_used_when_no_simd() {
-        assert_eq!(super::best_backend_for(false, false), Backend::Portable);
+        assert_eq!(
+            super::best_backend_for(false, false, false),
+            Backend::Portable
+        );
+    }
+
+    #[cfg(feature = "avx512")]
+    #[test]
+    fn avx512_wins_when_present() {
+        assert_eq!(super::best_backend_for(true, true, true), Backend::Avx512);
+        assert_eq!(super::best_backend_for(true, false, false), Backend::Avx512);
+    }
+
+    #[cfg(not(feature = "avx512"))]
+    #[test]
+    fn avx512_flag_is_ignored_when_compiled_out() {
+        assert_eq!(super::best_backend_for(true, true, false), Backend::Avx2);
+        assert_eq!(
+            super::best_backend_for(true, false, false),
+            Backend::Portable
+        );
     }
 }

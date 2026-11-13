@@ -33,6 +33,12 @@ const MIN_BYTES_PER_THREAD: usize = 4 * 1024 * 1024;
 /// [`LANES`] hash states of one backend, advanced together.
 enum Group {
     Portable([portable::State; LANES]),
+    #[cfg(all(
+        target_arch = "x86_64",
+        feature = "avx512",
+        not(feature = "portable-only")
+    ))]
+    Avx512([arch::x86::avx512::State; LANES]),
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
     Avx2([arch::x86::avx2::State; LANES]),
     #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -47,6 +53,12 @@ impl Group {
     fn new(fresh: &Inner) -> Self {
         match fresh {
             Inner::Portable(s) => Group::Portable(core::array::from_fn(|_| s.clone())),
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Inner::Avx512(s) => Group::Avx512([*s; LANES]),
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Inner::Avx2(s) => Group::Avx2([*s; LANES]),
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -62,6 +74,15 @@ impl Group {
     fn update_lockstep(&mut self, streams: &[&[[u8; 32]]; LANES]) {
         match self {
             Group::Portable(states) => lockstep(states, streams, |s, p| s.update_packet(p)),
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Group::Avx512(states) => {
+                // SAFETY: a `Group::Avx512` exists only when AVX-512 was detected.
+                unsafe { x86_entry::avx512::update_lockstep(states, streams) }
+            }
             // SAFETY: a `Group::Avx2` exists only when AVX2 was detected.
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Group::Avx2(states) => unsafe { x86_entry::avx2::update_lockstep(states, streams) },
@@ -77,6 +98,12 @@ impl Group {
     fn lane(&self, lane: usize) -> Inner {
         match self {
             Group::Portable(states) => Inner::Portable(states[lane].clone()),
+            #[cfg(all(
+                target_arch = "x86_64",
+                feature = "avx512",
+                not(feature = "portable-only")
+            ))]
+            Group::Avx512(states) => Inner::Avx512(states[lane]),
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
             Group::Avx2(states) => Inner::Avx2(states[lane]),
             #[cfg(all(target_arch = "x86_64", not(feature = "portable-only")))]
@@ -341,12 +368,16 @@ mod tests {
     /// Every backend this build knows about; unsupported ones fall back to
     /// portable, so this is valid on any CPU.
     fn backends() -> Vec<Backend> {
-        vec![
+        [
             Backend::Avx2,
             Backend::Sse41,
+            #[cfg(all(target_arch = "x86_64", feature = "avx512"))]
+            Backend::Avx512,
             Backend::Neon,
             Backend::Portable,
         ]
+        .into_iter()
+        .collect()
     }
 
     fn data(len: usize, seed: u8) -> Vec<u8> {

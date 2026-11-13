@@ -18,6 +18,7 @@ reference vectors, and the streaming "cat" equivalence test) on every backend.
 
 | Backend | Platforms | Selection |
 |---|---|---|
+| AVX-512VL | x86_64 | runtime-detected; off-by-default `avx512` feature (needs Rust 1.89+ when enabled) |
 | AVX2 | x86_64 | runtime-detected |
 | SSE4.1 | x86_64 | runtime-detected |
 | NEON | aarch64 | always available |
@@ -83,11 +84,12 @@ let mac13 = sip_hash13(k, b"message");
   in use.
 - Without `std`, SIMD backends are only used when enabled at compile time
   (e.g. `-C target-feature=+avx2`), since runtime detection needs `std`.
-- The low-level `avx2::State` / `sse41::State` types are `unsafe` and only run
-  at full speed when called from a function that enables the matching feature
+- The low-level `avx2::State` / `sse41::State` (and `avx512::State` with the
+  `avx512` feature) types are `unsafe` and only run at full speed when called
+  from a function that enables the matching feature
   (`#[target_feature(enable = "avx2")]`); `HighwayHasher` and the one-shot
   helpers already do this for you.
-- MSRV: Rust 1.88.
+- MSRV: Rust 1.88 (the off-by-default `avx512` feature needs 1.89+ when enabled).
 
 ## Performance
 

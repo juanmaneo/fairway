@@ -114,3 +114,9 @@ macro_rules! entry_points {
 
 entry_points!(avx2, "avx2", crate::arch::x86::avx2::State);
 entry_points!(sse41, "sse4.1", crate::arch::x86::sse41::State);
+#[cfg(feature = "avx512")]
+entry_points!(
+    avx512,
+    "avx512f,avx512vl,avx512bw",
+    crate::arch::x86::avx512::State
+);

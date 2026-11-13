@@ -292,7 +292,7 @@ fn reset_restarts_with_new_key() {
 #[test]
 fn unavailable_backend_falls_back_to_portable() {
     let available = backends();
-    for backend in common::ALL_BACKENDS {
+    for backend in common::ALL_BACKENDS.iter().copied() {
         let h = HighwayHasher::with_backend(Key(KEY64), backend);
         let expected = if available.contains(&backend) {
             backend
@@ -307,5 +307,8 @@ fn unavailable_backend_falls_back_to_portable() {
 #[test]
 fn backend_names() {
     let names: Vec<&str> = common::ALL_BACKENDS.iter().map(|b| b.name()).collect();
+    #[cfg(all(target_arch = "x86_64", feature = "avx512"))]
+    assert_eq!(names, ["Portable", "SSE4.1", "AVX2", "AVX512VL", "NEON"]);
+    #[cfg(not(all(target_arch = "x86_64", feature = "avx512")))]
     assert_eq!(names, ["Portable", "SSE4.1", "AVX2", "NEON"]);
 }
