@@ -6,6 +6,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-14
+
+Feature and fix release. Hash output is unchanged wherever it was correct
+(big-endian aarch64 now returns the correct value) and the public API only
+grows.
+
 ### Changed
 
 - Small inputs on the AVX2 backend are fast without link-time optimization.

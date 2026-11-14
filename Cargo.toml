@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/fairway-hash", "crates/fairway-capi", "xtask"]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 # `<[T]>::as_chunks` is stable since 1.88.
 rust-version = "1.88"
